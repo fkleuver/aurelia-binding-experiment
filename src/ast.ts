@@ -1,40 +1,34 @@
 import { getContextFor } from './scope';
 import { connectBindingToSignal } from './signals';
-import { Scope, OverrideContext, LookupFunctions } from './types';
+import { Scope, OverrideContext, LookupFunctions, EvaluateResult, BindingFlags, Binding, AssignResult } from './types';
+import { parseBindingBehavior, parseValueConverter, parseVariadicArguments, parseExpression, parseConditional, parseLeftHandSideExpression, ParserState } from './parser';
 
-export class Expression {
-  public isChain: boolean;
-  public isAssignable: boolean;
-  constructor() {
-    this.isChain = false;
+export type Expression = Chain | BindingBehavior | ValueConverter | Assign | Conditional |
+  AccessThis | AccessScope | AccessMember | AccessKeyed |
+  CallScope | CallMember | CallFunction | Binary | PrefixNot | PrefixUnary |
+  LiteralPrimitive | LiteralString | LiteralTemplate | LiteralArray | LiteralObject;
+
+export class Chain {
+  public isChain: true;
+  public isAssignable: false;
+  public bind: undefined;
+  public unbind: undefined;
+
+  public expressions: Array<ReturnType<typeof parseBindingBehavior>>;
+  constructor(expressions: Array<ReturnType<typeof parseBindingBehavior>>) {
+    this.isChain = true;
     this.isAssignable = false;
-  }
-
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, args?: any): any {
-    throw new Error(`Binding expression "${this}" cannot be evaluated.`);
-  }
-
-  public assign(scope: Scope, value: any, lookupFunctions: LookupFunctions): any {
-    throw new Error(`Binding expression "${this}" cannot be assigned to.`);
-  }
-}
-
-export class Chain extends Expression {
-  public expressions: Expression[];
-  constructor(expressions: Expression[]) {
-    super();
 
     this.expressions = expressions;
-    this.isChain = true;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions): any {
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): EvaluateResult<ReturnType<typeof parseBindingBehavior>> {
     let result;
     const expressions = this.expressions;
     let last;
 
     for (let i = 0, length = expressions.length; i < length; ++i) {
-      last = expressions[i].evaluate(scope, lookupFunctions);
+      last = expressions[i].evaluate(scope, lookupFunctions, flags);
 
       if (last !== null) {
         result = last;
@@ -47,39 +41,47 @@ export class Chain extends Expression {
   public accept(visitor: any): any {
     return visitor.visitChain(this);
   }
+
+  public assign(scope: Scope, value: any, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
+    throw new Error(`Binding expression "${this}" cannot be assigned to.`);
+  }
 }
 
-export class BindingBehavior extends Expression {
-  public expression: any;
-  public name: any;
-  public args: any;
-  constructor(expression: any, name: any, args: any) {
-    super();
+export class BindingBehavior {
+  public isChain: false;
+  public isAssignable: false;
+
+  public expression: ReturnType<typeof parseBindingBehavior>;
+  public name: string;
+  public args: ReturnType<typeof parseVariadicArguments>;
+  constructor(expression: ReturnType<typeof parseBindingBehavior>, name: string, args: ReturnType<typeof parseVariadicArguments>) {
+    this.isChain = false;
+    this.isAssignable = false;
 
     this.expression = expression;
     this.name = name;
     this.args = args;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions): any {
-    return this.expression.evaluate(scope, lookupFunctions);
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): EvaluateResult<ReturnType<typeof parseBindingBehavior>> {
+    return this.expression.evaluate(scope, lookupFunctions, flags);
   }
 
-  public assign(scope: Scope, value: any, lookupFunctions: LookupFunctions): any {
-    return this.expression.assign(scope, value, lookupFunctions);
+  public assign(scope: Scope, value: any, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
+    return this.expression.assign(scope, value, lookupFunctions, flags);
   }
 
   public accept(visitor: any): any {
     return visitor.visitBindingBehavior(this);
   }
 
-  public connect(binding: any, scope: Scope): any {
-    this.expression.connect(binding, scope);
+  public connect(binding: Binding, scope: Scope, flags: BindingFlags): void {
+    this.expression.connect(binding, scope, flags);
   }
 
-  public bind(binding: any, scope: Scope, lookupFunctions: LookupFunctions): any {
+  public bind(binding: Binding, scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
     if (this.expression.expression && this.expression.bind) {
-      this.expression.bind(binding, scope, lookupFunctions);
+      this.expression.bind(binding, scope, lookupFunctions, flags);
     }
     const behavior = lookupFunctions.bindingBehaviors(this.name);
     if (!behavior) {
@@ -90,26 +92,32 @@ export class BindingBehavior extends Expression {
       throw new Error(`A binding behavior named "${this.name}" has already been applied to "${this.expression}"`);
     }
     binding[behaviorKey] = behavior;
-    behavior.bind.apply(behavior, [binding, scope].concat(evalList(scope, this.args, binding.lookupFunctions)));
+    behavior.bind.apply(behavior, [binding, scope].concat(evalList(scope, this.args, binding.lookupFunctions, flags)));
   }
 
-  public unbind(binding: any, scope: Scope): any {
+  public unbind(binding: Binding, scope: Scope, flags: BindingFlags): any {
     const behaviorKey = `behavior-${this.name}`;
-    binding[behaviorKey].unbind(binding, scope);
+    binding[behaviorKey].unbind(binding, scope, flags);
     binding[behaviorKey] = null;
     if (this.expression.expression && this.expression.unbind) {
-      this.expression.unbind(binding, scope);
+      this.expression.unbind(binding, scope, flags);
     }
   }
 }
 
-export class ValueConverter extends Expression {
-  public expression: any;
-  public name: any;
-  public args: any;
+export class ValueConverter {
+  public isChain: false;
+  public isAssignable: false;
+  public bind: undefined;
+  public unbind: undefined;
+
+  public expression: ReturnType<typeof parseValueConverter>;
+  public name: string;
+  public args: ReturnType<typeof parseVariadicArguments>;
   public allArgs: any[];
-  constructor(expression: any, name: any, args: any) {
-    super();
+  constructor(expression: ReturnType<typeof parseValueConverter>, name: string, args: ReturnType<typeof parseVariadicArguments>) {
+    this.isChain = false;
+    this.isAssignable = false;
 
     this.expression = expression;
     this.name = name;
@@ -117,41 +125,41 @@ export class ValueConverter extends Expression {
     this.allArgs = [expression].concat(args);
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions): any {
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): EvaluateResult<ReturnType<typeof parseValueConverter>> {
     const converter = lookupFunctions.valueConverters(this.name);
     if (!converter) {
       throw new Error(`No ValueConverter named "${this.name}" was found!`);
     }
 
-    if ('toView' in converter) {
-      return converter.toView.apply(converter, evalList(scope, this.allArgs, lookupFunctions));
+    if (converter.toView) {
+      return converter.toView.apply(converter, evalList(scope, this.allArgs, lookupFunctions, flags));
     }
 
-    return this.allArgs[0].evaluate(scope, lookupFunctions);
+    return this.expression.evaluate(scope, lookupFunctions, flags);
   }
 
-  public assign(scope: Scope, value: any, lookupFunctions: LookupFunctions): any {
+  public assign(scope: Scope, value: any, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
     const converter = lookupFunctions.valueConverters(this.name);
     if (!converter) {
       throw new Error(`No ValueConverter named "${this.name}" was found!`);
     }
 
-    if ('fromView' in converter) {
-      value = converter.fromView.apply(converter, [value].concat(evalList(scope, this.args, lookupFunctions)));
+    if (converter.fromView) {
+      value = converter.fromView.apply(converter, [value].concat(evalList(scope, this.args, lookupFunctions, flags)));
     }
 
-    return this.allArgs[0].assign(scope, value, lookupFunctions);
+    return this.expression.assign(scope, value, lookupFunctions, flags);
   }
 
   public accept(visitor: any): any {
     return visitor.visitValueConverter(this);
   }
 
-  public connect(binding: any, scope: Scope): any {
+  public connect(binding: Binding, scope: Scope, flags: BindingFlags): void {
     const expressions = this.allArgs;
     let i = expressions.length;
     while (i--) {
-      expressions[i].connect(binding, scope);
+      expressions[i].connect(binding, scope, flags);
     }
     const converter = binding.lookupFunctions.valueConverters(this.name);
     if (!converter) {
@@ -168,19 +176,25 @@ export class ValueConverter extends Expression {
   }
 }
 
-export class Assign extends Expression {
-  public target: any;
-  public value: any;
-  constructor(target: any, value: any) {
-    super();
+export class Assign {
+  public isChain: false;
+  public isAssignable: true;
+  public bind: undefined;
+  public unbind: undefined;
+  public expression: undefined;
+
+  public target: ReturnType<typeof parseExpression>;
+  public value: ReturnType<typeof parseConditional>;
+  constructor(target: ReturnType<typeof parseExpression>, value: ReturnType<typeof parseConditional>) {
+    this.isChain = false;
+    this.isAssignable = true;
 
     this.target = target;
     this.value = value;
-    this.isAssignable = true;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions): any {
-    return this.target.assign(scope, this.value.evaluate(scope, lookupFunctions));
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): AssignResult<ReturnType<typeof parseExpression>> {
+    return this.target.assign(scope, this.value.evaluate(scope, lookupFunctions, flags), lookupFunctions, flags);
   }
 
   public accept(vistor: any): any {
@@ -188,54 +202,72 @@ export class Assign extends Expression {
   }
 
   // tslint:disable-next-line:no-empty
-  public connect(binding: any, scope: Scope): any {}
+  public connect(binding: Binding, scope: Scope, flags: BindingFlags): void {}
 
-  public assign(scope: Scope, value: any): any {
-    this.value.assign(scope, value);
-    this.target.assign(scope, value);
+  public assign(scope: Scope, value: any, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
+    this.value.assign(scope, value, lookupFunctions, flags);
+    this.target.assign(scope, value, lookupFunctions, flags);
   }
 }
 
-export class Conditional extends Expression {
-  public condition: any;
-  public yes: any;
-  public no: any;
-  constructor(condition: any, yes: any, no: any) {
-    super();
+export class Conditional {
+  public isChain: false;
+  public isAssignable: false;
+  public bind: undefined;
+  public unbind: undefined;
+  public expression: undefined;
+
+  public condition: ReturnType<typeof parseConditional>;
+  public yes: ReturnType<typeof parseExpression>;
+  public no: ReturnType<typeof parseExpression>;
+  constructor(condition: ReturnType<typeof parseConditional>, yes: ReturnType<typeof parseExpression>, no: ReturnType<typeof parseExpression>) {
+    this.isChain = false;
+    this.isAssignable = false;
 
     this.condition = condition;
     this.yes = yes;
     this.no = no;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions): any {
-    return !!this.condition.evaluate(scope, lookupFunctions)
-      ? this.yes.evaluate(scope, lookupFunctions)
-      : this.no.evaluate(scope, lookupFunctions);
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): EvaluateResult<ReturnType<typeof parseExpression>> {
+    return !!this.condition.evaluate(scope, lookupFunctions, flags)
+      ? this.yes.evaluate(scope, lookupFunctions, flags)
+      : this.no.evaluate(scope, lookupFunctions, flags);
   }
 
   public accept(visitor: any): any {
     return visitor.visitConditional(this);
   }
 
-  public connect(binding: any, scope: Scope): any {
-    this.condition.connect(binding, scope);
-    if (this.condition.evaluate(scope)) {
-      this.yes.connect(binding, scope);
+  public connect(binding: Binding, scope: Scope, flags: BindingFlags): void {
+    this.condition.connect(binding, scope, flags);
+    if (this.condition.evaluate(scope, <any>undefined, flags)) {
+      this.yes.connect(binding, scope, flags);
     } else {
-      this.no.connect(binding, scope);
+      this.no.connect(binding, scope, flags);
     }
+  }
+
+  public assign(scope: Scope, value: any, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
+    throw new Error(`Binding expression "${this}" cannot be assigned to.`);
   }
 }
 
-export class AccessThis extends Expression {
-  public ancestor: any;
-  constructor(ancestor: any) {
-    super();
+export class AccessThis {
+  public isChain: false;
+  public isAssignable: false;
+  public bind: undefined;
+  public unbind: undefined;
+  public expression: undefined;
+
+  public ancestor: number;
+  constructor(ancestor: number) {
+    this.isChain = false;
+    this.isAssignable = false;
     this.ancestor = ancestor;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions): any {
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): OverrideContext | { [key: string]: any } | undefined {
     let oc: OverrideContext | null = scope.overrideContext;
     let i = this.ancestor;
     while (i-- && oc) {
@@ -248,26 +280,36 @@ export class AccessThis extends Expression {
     return visitor.visitAccessThis(this);
   }
 
-  public connect(binding: any, scope: Scope): any {}
+  public connect(binding: Binding, scope: Scope, flags: BindingFlags): void {}
+
+  public assign(scope: Scope, value: any, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
+    throw new Error(`Binding expression "${this}" cannot be assigned to.`);
+  }
 }
 
-export class AccessScope extends Expression {
-  public name: any;
-  public ancestor: any;
-  constructor(name: any, ancestor: any) {
-    super();
+export class AccessScope {
+  public isChain: false;
+  public isAssignable: true;
+  public bind: undefined;
+  public unbind: undefined;
+  public expression: undefined;
+
+  public name: string;
+  public ancestor: number;
+  constructor(name: string, ancestor: number) {
+    this.isChain = false;
+    this.isAssignable = true;
 
     this.name = name;
     this.ancestor = ancestor;
-    this.isAssignable = true;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions): any {
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
     const context = getContextFor(this.name, scope, this.ancestor);
     return context[this.name];
   }
 
-  public assign(scope: Scope, value: any): any {
+  public assign(scope: Scope, value: any, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
     const context = getContextFor(this.name, scope, this.ancestor);
     return context ? (context[this.name] = value) : undefined;
   }
@@ -276,34 +318,40 @@ export class AccessScope extends Expression {
     return visitor.visitAccessScope(this);
   }
 
-  public connect(binding: any, scope: Scope): any {
+  public connect(binding: Binding, scope: Scope, flags: BindingFlags): void {
     const context = getContextFor(this.name, scope, this.ancestor);
     binding.observeProperty(context, this.name);
   }
 }
 
-export class AccessMember extends Expression {
-  public name: any;
-  public object: any;
-  constructor(object: any, name: any) {
-    super();
+export class AccessMember {
+  public isChain: false;
+  public isAssignable: true;
+  public bind: undefined;
+  public unbind: undefined;
+  public expression: undefined;
+
+  public name: string;
+  public object: ReturnType<typeof parseExpression>;
+  constructor(object: ReturnType<typeof parseExpression>, name: string) {
+    this.isChain = false;
+    this.isAssignable = true;
 
     this.object = object;
     this.name = name;
-    this.isAssignable = true;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions): any {
-    const instance = this.object.evaluate(scope, lookupFunctions);
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
+    const instance = this.object.evaluate(scope, lookupFunctions, flags);
     return instance === null || instance === undefined ? instance : instance[this.name];
   }
 
-  public assign(scope: Scope, value: any): any {
-    let instance = this.object.evaluate(scope);
+  public assign(scope: Scope, value: any, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
+    let instance = this.object.evaluate(scope, lookupFunctions, flags);
 
     if (instance === null || instance === undefined) {
       instance = {};
-      this.object.assign(scope, instance);
+      this.object.assign(scope, instance, lookupFunctions, flags);
     }
 
     instance[this.name] = value;
@@ -314,35 +362,41 @@ export class AccessMember extends Expression {
     return visitor.visitAccessMember(this);
   }
 
-  public connect(binding: any, scope: Scope): any {
-    this.object.connect(binding, scope);
-    const obj = this.object.evaluate(scope);
+  public connect(binding: Binding, scope: Scope, flags: BindingFlags): void {
+    this.object.connect(binding, scope, flags);
+    const obj = this.object.evaluate(scope, <any>undefined, flags);
     if (obj) {
       binding.observeProperty(obj, this.name);
     }
   }
 }
 
-export class AccessKeyed extends Expression {
-  public object: any;
-  public key: any;
-  constructor(object: any, key: any) {
-    super();
+export class AccessKeyed {
+  public isChain: false;
+  public isAssignable: true;
+  public bind: undefined;
+  public unbind: undefined;
+  public expression: undefined;
+
+  public object: ReturnType<typeof parseExpression>;
+  public key: ReturnType<typeof parseExpression>;
+  constructor(object: ReturnType<typeof parseExpression>, key: ReturnType<typeof parseExpression>) {
+    this.isChain = false;
+    this.isAssignable = true;
 
     this.object = object;
     this.key = key;
-    this.isAssignable = true;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions): any {
-    const instance = this.object.evaluate(scope, lookupFunctions);
-    const lookup = this.key.evaluate(scope, lookupFunctions);
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
+    const instance = this.object.evaluate(scope, lookupFunctions, flags);
+    const lookup = this.key.evaluate(scope, lookupFunctions, flags);
     return getKeyed(instance, lookup);
   }
 
-  public assign(scope: Scope, value: any): any {
-    const instance = this.object.evaluate(scope);
-    const lookup = this.key.evaluate(scope);
+  public assign(scope: Scope, value: any, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
+    const instance = this.object.evaluate(scope, lookupFunctions, flags);
+    const lookup = this.key.evaluate(scope, lookupFunctions, flags);
     return setKeyed(instance, lookup, value);
   }
 
@@ -350,12 +404,12 @@ export class AccessKeyed extends Expression {
     return visitor.visitAccessKeyed(this);
   }
 
-  public connect(binding: any, scope: Scope): any {
-    this.object.connect(binding, scope);
-    const obj = this.object.evaluate(scope);
+  public connect(binding: Binding, scope: Scope, flags: BindingFlags): void {
+    this.object.connect(binding, scope, flags);
+    const obj = this.object.evaluate(scope, <any>undefined, flags);
     if (obj instanceof Object) {
-      this.key.connect(binding, scope);
-      const key = this.key.evaluate(scope);
+      this.key.connect(binding, scope, flags);
+      const key = this.key.evaluate(scope, <any>undefined, flags);
       // observe the property represented by the key as long as it's not an array
       // being accessed by an integer key which would require dirty-checking.
       if (key !== null && key !== undefined && !(Array.isArray(obj) && typeof key === 'number')) {
@@ -365,22 +419,29 @@ export class AccessKeyed extends Expression {
   }
 }
 
-export class CallScope extends Expression {
-  public name: any;
-  public args: any;
-  public ancestor: any;
-  constructor(name: any, args: any, ancestor: any) {
-    super();
+export class CallScope {
+  public isChain: false;
+  public isAssignable: false;
+  public bind: undefined;
+  public unbind: undefined;
+  public expression: undefined;
+
+  public name: string;
+  public args: Array<ReturnType<typeof parseExpression>>;
+  public ancestor: number;
+  constructor(name: string, args: Array<ReturnType<typeof parseExpression>>, ancestor: number) {
+    this.isChain = false;
+    this.isAssignable = false;
 
     this.name = name;
     this.args = args;
     this.ancestor = ancestor;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, mustEvaluate: any): any {
-    const args = evalList(scope, this.args, lookupFunctions);
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
+    const args = evalList(scope, this.args, lookupFunctions, flags);
     const context = getContextFor(this.name, scope, this.ancestor);
-    const func = getFunction(context, this.name, mustEvaluate);
+    const func = getFunction(context, this.name, flags & BindingFlags.mustEvaluate);
     if (func) {
       return func.apply(context, args);
     }
@@ -391,31 +452,42 @@ export class CallScope extends Expression {
     return visitor.visitCallScope(this);
   }
 
-  public connect(binding: any, scope: Scope): any {
+  public connect(binding: Binding, scope: Scope, flags: BindingFlags): void {
     const args = this.args;
     let i = args.length;
     while (i--) {
-      args[i].connect(binding, scope);
+      args[i].connect(binding, scope, flags);
     }
+  }
+
+  public assign(scope: Scope, value: any, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
+    throw new Error(`Binding expression "${this}" cannot be assigned to.`);
   }
 }
 
-export class CallMember extends Expression {
-  public name: any;
-  public args: any;
-  public object: any;
-  constructor(object: any, name: any, args: any) {
-    super();
+export class CallMember {
+  public isChain: false;
+  public isAssignable: false;
+  public bind: undefined;
+  public unbind: undefined;
+  public expression: undefined;
+
+  public name: string;
+  public args: Array<ReturnType<typeof parseExpression>>;
+  public object: ReturnType<typeof parseExpression>;
+  constructor(object: ReturnType<typeof parseExpression>, name: string, args: Array<ReturnType<typeof parseExpression>>) {
+    this.isChain = false;
+    this.isAssignable = false;
 
     this.object = object;
     this.name = name;
     this.args = args;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, mustEvaluate: any): any {
-    const instance = this.object.evaluate(scope, lookupFunctions);
-    const args = evalList(scope, this.args, lookupFunctions);
-    const func = getFunction(instance, this.name, mustEvaluate);
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
+    const instance = this.object.evaluate(scope, lookupFunctions, flags);
+    const args = evalList(scope, this.args, lookupFunctions, flags);
+    const func = getFunction(instance, this.name, flags & BindingFlags.mustEvaluate);
     if (func) {
       return func.apply(instance, args);
     }
@@ -426,35 +498,46 @@ export class CallMember extends Expression {
     return visitor.visitCallMember(this);
   }
 
-  public connect(binding: any, scope: Scope): any {
-    this.object.connect(binding, scope);
-    const obj = this.object.evaluate(scope);
+  public connect(binding: Binding, scope: Scope, flags: BindingFlags): void {
+    this.object.connect(binding, scope, flags);
+    const obj = this.object.evaluate(scope, <any>undefined, flags);
     if (getFunction(obj, this.name, false)) {
       const args = this.args;
       let i = args.length;
       while (i--) {
-        args[i].connect(binding, scope);
+        args[i].connect(binding, scope, flags);
       }
     }
   }
+
+  public assign(scope: Scope, value: any, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
+    throw new Error(`Binding expression "${this}" cannot be assigned to.`);
+  }
 }
 
-export class CallFunction extends Expression {
-  public args: any;
-  public func: any;
-  constructor(func: any, args: any) {
-    super();
+export class CallFunction {
+  public isChain: false;
+  public isAssignable: false;
+  public bind: undefined;
+  public unbind: undefined;
+  public expression: undefined;
+
+  public args: Array<ReturnType<typeof parseExpression>>;
+  public func: ReturnType<typeof parseExpression>;
+  constructor(func: ReturnType<typeof parseExpression>, args: Array<ReturnType<typeof parseExpression>>) {
+    this.isChain = false;
+    this.isAssignable = false;
 
     this.func = func;
     this.args = args;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, mustEvaluate: any): any {
-    const func = this.func.evaluate(scope, lookupFunctions);
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
+    const func = this.func.evaluate(scope, lookupFunctions, flags);
     if (typeof func === 'function') {
-      return func.apply(null, evalList(scope, this.args, lookupFunctions));
+      return func.apply(null, evalList(scope, this.args, lookupFunctions, flags));
     }
-    if (!mustEvaluate && (func === null || func === undefined)) {
+    if (!(flags & BindingFlags.mustEvaluate) && (func === null || func === undefined)) {
       return undefined;
     }
     throw new Error(`${this.func} is not a function`);
@@ -464,43 +547,54 @@ export class CallFunction extends Expression {
     return visitor.visitCallFunction(this);
   }
 
-  public connect(binding: any, scope: Scope): any {
-    this.func.connect(binding, scope);
-    const func = this.func.evaluate(scope);
+  public connect(binding: Binding, scope: Scope, flags: BindingFlags): void {
+    this.func.connect(binding, scope, flags);
+    const func = this.func.evaluate(scope, <any>undefined, flags);
     if (typeof func === 'function') {
       const args = this.args;
       let i = args.length;
       while (i--) {
-        args[i].connect(binding, scope);
+        args[i].connect(binding, scope, flags);
       }
     }
   }
+
+  public assign(scope: Scope, value: any, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
+    throw new Error(`Binding expression "${this}" cannot be assigned to.`);
+  }
 }
 
-export class Binary extends Expression {
-  public operation: any;
-  public left: any;
-  public right: any;
-  constructor(operation: any, left: any, right: any) {
-    super();
+export class Binary {
+  public isChain: false;
+  public isAssignable: false;
+  public bind: undefined;
+  public unbind: undefined;
+  public expression: undefined;
+
+  public operation: string;
+  public left: ReturnType<typeof parseLeftHandSideExpression>;
+  public right: ReturnType<typeof parseExpression>;
+  constructor(operation: string, left: ReturnType<typeof parseLeftHandSideExpression>, right: ReturnType<typeof parseExpression>) {
+    this.isChain = false;
+    this.isAssignable = false;
 
     this.operation = operation;
     this.left = left;
     this.right = right;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions): any {
-    const left = this.left.evaluate(scope, lookupFunctions);
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): string | number | boolean | null {
+    const left = this.left.evaluate(scope, lookupFunctions, flags);
 
     switch (this.operation) {
       case '&&':
-        return left && this.right.evaluate(scope, lookupFunctions);
+        return left && this.right.evaluate(scope, lookupFunctions, flags);
       case '||':
-        return left || this.right.evaluate(scope, lookupFunctions);
+        return left || this.right.evaluate(scope, lookupFunctions, flags);
       default:
     }
 
-    const right = this.right.evaluate(scope, lookupFunctions);
+    const right = this.right.evaluate(scope, lookupFunctions, flags);
 
     switch (this.operation) {
       case '==':
@@ -566,55 +660,75 @@ export class Binary extends Expression {
     return visitor.visitBinary(this);
   }
 
-  public connect(binding: any, scope: Scope): any {
-    this.left.connect(binding, scope);
-    const left = this.left.evaluate(scope);
+  public connect(binding: Binding, scope: Scope, flags: BindingFlags): void {
+    this.left.connect(binding, scope, flags);
+    const left = this.left.evaluate(scope, <any>undefined, flags);
     if ((this.operation === '&&' && !left) || (this.operation === '||' && left)) {
       return;
     }
-    this.right.connect(binding, scope);
+    this.right.connect(binding, scope, flags);
+  }
+
+  public assign(scope: Scope, value: any, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
+    throw new Error(`Binding expression "${this}" cannot be assigned to.`);
   }
 }
 
-export class PrefixNot extends Expression {
-  public expression: any;
-  public operation: any;
-  constructor(operation: any, expression: any) {
-    super();
+export class PrefixNot {
+  public isChain: false;
+  public isAssignable: false;
+  public bind: undefined;
+  public unbind: undefined;
+
+  public expression: ReturnType<typeof parseLeftHandSideExpression>;
+  public operation: '!';
+  constructor(operation: '!', expression:  ReturnType<typeof parseLeftHandSideExpression>) {
+    this.isChain = false;
+    this.isAssignable = false;
 
     this.operation = operation;
     this.expression = expression;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions): any {
-    return !this.expression.evaluate(scope, lookupFunctions);
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): EvaluateResult<ReturnType<typeof parseLeftHandSideExpression>> {
+    return !this.expression.evaluate(scope, lookupFunctions, flags);
   }
 
   public accept(visitor: any): any {
     return visitor.visitPrefix(this);
   }
 
-  public connect(binding: any, scope: Scope): any {
-    this.expression.connect(binding, scope);
+  public connect(binding: Binding, scope: Scope, flags: BindingFlags): void {
+    this.expression.connect(binding, scope, flags);
+  }
+
+  public assign(scope: Scope, value: any, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
+    throw new Error(`Binding expression "${this}" cannot be assigned to.`);
   }
 }
 
-export class PrefixUnary extends Expression {
-  public expression: any;
-  public operation: any;
-  constructor(operation: any, expression: any) {
-    super();
+export class PrefixUnary {
+  public isChain: false;
+  public isAssignable: false;
+  public bind: undefined;
+  public unbind: undefined;
+
+  public expression:  ReturnType<typeof parseLeftHandSideExpression>;
+  public operation: 'void' | 'typeof';
+  constructor(operation: 'void' | 'typeof', expression:  ReturnType<typeof parseLeftHandSideExpression>) {
+    this.isChain = false;
+    this.isAssignable = false;
 
     this.operation = operation;
     this.expression = expression;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions): any {
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): EvaluateResult<ReturnType<typeof parseLeftHandSideExpression>> {
     switch (this.operation) {
       case 'typeof':
-        return typeof this.expression.evaluate(scope, lookupFunctions);
+        return typeof this.expression.evaluate(scope, lookupFunctions, flags);
       case 'void':
-        return void this.expression.evaluate(scope, lookupFunctions);
+        return void this.expression.evaluate(scope, lookupFunctions, flags);
       default:
     }
 
@@ -625,20 +739,31 @@ export class PrefixUnary extends Expression {
     return visitor.visitPrefix(this);
   }
 
-  public connect(binding: any, scope: Scope): any {
-    this.expression.connect(binding, scope);
+  public connect(binding: Binding, scope: Scope, flags: BindingFlags): void {
+    this.expression.connect(binding, scope, flags);
+  }
+
+  public assign(scope: Scope, value: any, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
+    throw new Error(`Binding expression "${this}" cannot be assigned to.`);
   }
 }
 
-export class LiteralPrimitive extends Expression {
-  public value: any;
-  constructor(value: any) {
-    super();
+export class LiteralPrimitive {
+  public isChain: false;
+  public isAssignable: false;
+  public bind: undefined;
+  public unbind: undefined;
+  public expression: undefined;
+
+  public value: number | boolean | null | undefined;
+  constructor(value: number | boolean | null | undefined) {
+    this.isChain = false;
+    this.isAssignable = false;
 
     this.value = value;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions): any {
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): number | boolean | null | undefined {
     return this.value;
   }
 
@@ -646,18 +771,29 @@ export class LiteralPrimitive extends Expression {
     return visitor.visitLiteralPrimitive(this);
   }
 
-  public connect(binding: any, scope: Scope): any {}
+  public connect(binding: Binding, scope: Scope, flags: BindingFlags): void {}
+
+  public assign(scope: Scope, value: any, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
+    throw new Error(`Binding expression "${this}" cannot be assigned to.`);
+  }
 }
 
-export class LiteralString extends Expression {
-  public value: any;
-  constructor(value: any) {
-    super();
+export class LiteralString {
+  public isChain: false;
+  public isAssignable: false;
+  public bind: undefined;
+  public unbind: undefined;
+  public expression: undefined;
+
+  public value: string;
+  constructor(value: string) {
+    this.isChain = false;
+    this.isAssignable = false;
 
     this.value = value;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions): any {
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): string {
     return this.value;
   }
 
@@ -665,17 +801,29 @@ export class LiteralString extends Expression {
     return visitor.visitLiteralString(this);
   }
 
-  public connect(binding: any, scope: Scope): any {}
+  public connect(binding: Binding, scope: Scope, flags: BindingFlags): void {}
+
+  public assign(scope: Scope, value: any, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
+    throw new Error(`Binding expression "${this}" cannot be assigned to.`);
+  }
 }
 
-export class LiteralTemplate extends Expression {
-  public expressions: any;
-  public func: any;
-  public cooked: any;
-  public length: any;
+export class LiteralTemplate {
+  public isChain: false;
+  public isAssignable: false;
+  public bind: undefined;
+  public unbind: undefined;
+  public expression: undefined;
+
+  public expressions: Array<ReturnType<typeof parseExpression>>;
+  public func?: ReturnType<typeof parseExpression>;
+  public cooked: Array<string> & { raw?: Array<string> };
+  public length: number;
   public tagged: boolean;
-  constructor(cooked: any, expressions?: any, raw?: any, func?: any) {
-    super();
+  constructor(cooked: Array<string>, expressions?: Array<ReturnType<typeof parseExpression>>, raw?: Array<string>, func?: ReturnType<typeof parseExpression>) {
+    this.isChain = false;
+    this.isAssignable = false;
+
     this.cooked = cooked;
     this.expressions = expressions || [];
     this.length = this.expressions.length;
@@ -686,13 +834,13 @@ export class LiteralTemplate extends Expression {
     }
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions): any {
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): string {
     const results = new Array(this.length);
     for (let i = 0; i < this.length; i++) {
-      results[i] = this.expressions[i].evaluate(scope, lookupFunctions);
+      results[i] = this.expressions[i].evaluate(scope, lookupFunctions, flags);
     }
-    if (this.tagged) {
-      const func = this.func.evaluate(scope, lookupFunctions);
+    if (this.func) {
+      const func = this.func.evaluate(scope, lookupFunctions, flags);
       if (typeof func !== 'function') {
         throw new Error(`${this.func} is not a function`);
       }
@@ -709,30 +857,41 @@ export class LiteralTemplate extends Expression {
     return visitor.visitLiteralTemplate(this);
   }
 
-  public connect(binding: any, scope: Scope): any {
+  public connect(binding: Binding, scope: Scope, flags: BindingFlags): void {
     for (let i = 0; i < this.length; i++) {
-      this.expressions[i].connect(binding, scope);
+      this.expressions[i].connect(binding, scope, flags);
     }
-    if (this.tagged) {
-      this.func.connect(binding, scope);
+    if (this.func) {
+      this.func.connect(binding, scope, flags);
     }
+  }
+
+  public assign(scope: Scope, value: any, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
+    throw new Error(`Binding expression "${this}" cannot be assigned to.`);
   }
 }
 
-export class LiteralArray extends Expression {
-  public elements: any;
-  constructor(elements: any) {
-    super();
+export class LiteralArray {
+  public isChain: false;
+  public isAssignable: false;
+  public bind: undefined;
+  public unbind: undefined;
+  public expression: undefined;
+
+  public elements: Array<ReturnType<typeof parseExpression>>;
+  constructor(elements: Array<ReturnType<typeof parseExpression>>) {
+    this.isChain = false;
+    this.isAssignable = false;
 
     this.elements = elements;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions): any {
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): Array<EvaluateResult<ReturnType<typeof parseExpression>>> {
     const elements = this.elements;
     const result = [];
 
     for (let i = 0, length = elements.length; i < length; ++i) {
-      result[i] = elements[i].evaluate(scope, lookupFunctions);
+      result[i] = elements[i].evaluate(scope, lookupFunctions, flags);
     }
 
     return result;
@@ -742,31 +901,42 @@ export class LiteralArray extends Expression {
     return visitor.visitLiteralArray(this);
   }
 
-  public connect(binding: any, scope: Scope): any {
+  public connect(binding: Binding, scope: Scope, flags: BindingFlags): void {
     const length = this.elements.length;
     for (let i = 0; i < length; i++) {
-      this.elements[i].connect(binding, scope);
+      this.elements[i].connect(binding, scope, flags);
     }
+  }
+
+  public assign(scope: Scope, value: any, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
+    throw new Error(`Binding expression "${this}" cannot be assigned to.`);
   }
 }
 
-export class LiteralObject extends Expression {
-  public keys: any;
-  public values: any;
-  constructor(keys: any, values: any) {
-    super();
+export class LiteralObject {
+  public isChain: false;
+  public isAssignable: false;
+  public bind: undefined;
+  public unbind: undefined;
+  public expression: undefined;
+
+  public keys: Array<string | number>;
+  public values: Array<ReturnType<typeof parseExpression>>;
+  constructor(keys: Array<string | number>, values: Array<ReturnType<typeof parseExpression>>) {
+    this.isChain = false;
+    this.isAssignable = false;
 
     this.keys = keys;
     this.values = values;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions): any {
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): { [key: string]: EvaluateResult<ReturnType<typeof parseExpression>> } {
     const instance: any = {};
     const keys = this.keys;
     const values = this.values;
 
     for (let i = 0, length = keys.length; i < length; ++i) {
-      instance[keys[i]] = values[i].evaluate(scope, lookupFunctions);
+      instance[keys[i]] = values[i].evaluate(scope, lookupFunctions, flags);
     }
 
     return instance;
@@ -776,20 +946,24 @@ export class LiteralObject extends Expression {
     return visitor.visitLiteralObject(this);
   }
 
-  public connect(binding: any, scope: Scope): any {
+  public connect(binding: Binding, scope: Scope, flags: BindingFlags): void {
     const length = this.keys.length;
     for (let i = 0; i < length; i++) {
-      this.values[i].connect(binding, scope);
+      this.values[i].connect(binding, scope, flags);
     }
+  }
+
+  public assign(scope: Scope, value: any, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
+    throw new Error(`Binding expression "${this}" cannot be assigned to.`);
   }
 }
 
 /// Evaluate the [list] in context of the [scope].
-function evalList(scope: Scope, list: any, lookupFunctions: LookupFunctions): any {
+function evalList(scope: Scope, list: any, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
   const length = list.length;
   const result = [];
   for (let i = 0; i < length; i++) {
-    result[i] = list[i].evaluate(scope, lookupFunctions);
+    result[i] = list[i].evaluate(scope, lookupFunctions, flags);
   }
   return result;
 }
@@ -820,7 +994,7 @@ function autoConvertAdd(a: any, b: any): any {
   return 0;
 }
 
-function getFunction(obj: any, name: any, mustExist: any): any {
+function getFunction(obj: any, name: string, mustExist: any): any {
   const func = obj === null || obj === undefined ? null : obj[name];
   if (typeof func === 'function') {
     return func;

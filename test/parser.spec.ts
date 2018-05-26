@@ -180,7 +180,7 @@ describe('Parser', () => {
         });
 
         const nestedTests = [
-          { expr: `${expr} ? a : b`, expected: paren ? new Conditional(expected, $a, $b) : new Conditional(expected.condition, expected.yes, new Conditional(expected.no, $a, $b)) },
+          { expr: `${expr} ? a : b`, expected: paren ? new Conditional(expected, $a, $b) : new Conditional(expected.condition, expected.yes, new Conditional(<any>expected.no, $a, $b)) },
           { expr: `a[b] ? ${expr} : a=((b))`, expected: new Conditional(new AccessKeyed($a, $b), expected, new Assign($a, $b)) },
           { expr: `a ? !b===!a : ${expr}`, expected: new Conditional($a, new Binary('===', new PrefixNot('!', $b), new PrefixNot('!', $a)), expected) }
         ];
