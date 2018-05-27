@@ -1,34 +1,34 @@
 import { Parser } from '../src/parser';
-import { AccessKeyed, AccessMember, AccessScope, AccessThis,
-  Assign, Binary, BindingBehavior, CallFunction,
-  CallMember, CallScope, Conditional,
-  LiteralArray, LiteralObject, LiteralPrimitive, LiteralString, LiteralTemplate,
-  Unary, ValueConverter } from '../src/ast';
+import { AccessKeyedExpression, AccessMemberExpression, AccessScopeExpression, AccessThisExpression,
+  AssignmentExpression, BinaryExpression, BindingBehaviorExpression, CallFunctionExpression,
+  CallMemberExpression, CallScopeExpression, TernaryExpression,
+  ArrayLiteralExpression, ObjectLiteralExpression, PrimitiveLiteralExpression, TemplateExpression,
+  UnaryExpression, ValueConverterExpression } from '../src/ast';
 import { latin1IdentifierStartChars, latin1IdentifierPartChars, otherBMPIdentifierPartChars } from './unicode';
 import { expect } from 'chai';
 
 /* eslint-disable no-loop-func, no-floating-decimal, key-spacing, new-cap, quotes, comma-spacing */
 
-const $a = new AccessScope('a', 0);
-const $b = new AccessScope('b', 0);
-const $c = new AccessScope('c', 0);
-const $x = new AccessScope('x', 0);
-const $y = new AccessScope('y', 0);
-const $z = new AccessScope('z', 0);
-const $foo = new AccessScope('foo', 0);
-const $bar = new AccessScope('bar', 0);
-const $baz = new AccessScope('baz', 0);
-const $true = new LiteralPrimitive(true);
-const $false = new LiteralPrimitive(false);
-const $null = new LiteralPrimitive(null);
-const $undefined = new LiteralPrimitive(undefined);
-const $str = new LiteralString('');
-const $str1 = new LiteralString('1');
-const $num0 = new LiteralPrimitive(0);
-const $num1 = new LiteralPrimitive(1);
-const $num2 = new LiteralPrimitive(2);
-const $arr = new LiteralArray([]);
-const $obj = new LiteralObject([], []);
+const $a = new AccessScopeExpression('a', 0);
+const $b = new AccessScopeExpression('b', 0);
+const $c = new AccessScopeExpression('c', 0);
+const $x = new AccessScopeExpression('x', 0);
+const $y = new AccessScopeExpression('y', 0);
+const $z = new AccessScopeExpression('z', 0);
+const $foo = new AccessScopeExpression('foo', 0);
+const $bar = new AccessScopeExpression('bar', 0);
+const $baz = new AccessScopeExpression('baz', 0);
+const $true = new PrimitiveLiteralExpression(true);
+const $false = new PrimitiveLiteralExpression(false);
+const $null = new PrimitiveLiteralExpression(null);
+const $undefined = new PrimitiveLiteralExpression(undefined);
+const $str = new PrimitiveLiteralExpression('');
+const $str1 = new PrimitiveLiteralExpression('1');
+const $num0 = new PrimitiveLiteralExpression(0);
+const $num1 = new PrimitiveLiteralExpression(1);
+const $num2 = new PrimitiveLiteralExpression(2);
+const $arr = new ArrayLiteralExpression([]);
+const $obj = new ObjectLiteralExpression([], []);
 
 const binaryOps = [
   '&&', '||',
@@ -60,18 +60,18 @@ describe('Parser', () => {
     describe('LiteralString', () => {
       // http://es5.github.io/x7.html#x7.8.4
       const tests = [
-        { expr: '\'foo\'', expected: new LiteralString('foo') },
-        { expr: `\'${unicodeEscape('äöüÄÖÜß')}\'`, expected: new LiteralString('äöüÄÖÜß') },
-        { expr: `\'${unicodeEscape('ಠ_ಠ')}\'`, expected: new LiteralString('ಠ_ಠ') },
-        { expr: '\'\\\\\'', expected: new LiteralString('\\') },
-        { expr: '\'\\\'\'', expected: new LiteralString('\'') },
-        { expr: '\'"\'', expected: new LiteralString('"') },
-        { expr: '\'\\f\'', expected: new LiteralString('\f') },
-        { expr: '\'\\n\'', expected: new LiteralString('\n') },
-        { expr: '\'\\r\'', expected: new LiteralString('\r') },
-        { expr: '\'\\t\'', expected: new LiteralString('\t') },
-        { expr: '\'\\v\'', expected: new LiteralString('\v') },
-        { expr: '\'\\v\'', expected: new LiteralString('\v') }
+        { expr: '\'foo\'', expected: new PrimitiveLiteralExpression('foo') },
+        { expr: `\'${unicodeEscape('äöüÄÖÜß')}\'`, expected: new PrimitiveLiteralExpression('äöüÄÖÜß') },
+        { expr: `\'${unicodeEscape('ಠ_ಠ')}\'`, expected: new PrimitiveLiteralExpression('ಠ_ಠ') },
+        { expr: '\'\\\\\'', expected: new PrimitiveLiteralExpression('\\') },
+        { expr: '\'\\\'\'', expected: new PrimitiveLiteralExpression('\'') },
+        { expr: '\'"\'', expected: new PrimitiveLiteralExpression('"') },
+        { expr: '\'\\f\'', expected: new PrimitiveLiteralExpression('\f') },
+        { expr: '\'\\n\'', expected: new PrimitiveLiteralExpression('\n') },
+        { expr: '\'\\r\'', expected: new PrimitiveLiteralExpression('\r') },
+        { expr: '\'\\t\'', expected: new PrimitiveLiteralExpression('\t') },
+        { expr: '\'\\v\'', expected: new PrimitiveLiteralExpression('\v') },
+        { expr: '\'\\v\'', expected: new PrimitiveLiteralExpression('\v') }
       ];
 
       for (const { expr, expected } of tests) {
@@ -81,22 +81,22 @@ describe('Parser', () => {
       }
     });
 
-    describe('template literal', () => {
+    describe('Template', () => {
       const tests = [
-        { expr: '`\r\n\t\n`', expected: new LiteralTemplate(['\r\n\t\n']) },
-        { expr: '`\n\r\n\r`', expected: new LiteralTemplate(['\n\r\n\r']) },
-        { expr: '`x\\r\\nx`', expected: new LiteralTemplate(['x\r\nx']) },
-        { expr: '`x\r\nx`', expected: new LiteralTemplate(['x\r\nx']) },
-        { expr: '``', expected: new LiteralTemplate(['']) },
-        { expr: '`foo`', expected: new LiteralTemplate(['foo']) },
-        { expr: '`$`', expected: new LiteralTemplate(['$']) },
-        { expr: '`a${foo}`', expected: new LiteralTemplate(['a', ''], [$foo]) },
-        { expr: '`${ {foo: 1} }`', expected: new LiteralTemplate(['', ''], [new LiteralObject(['foo'], [$num1])]) },
-        { expr: '`a${"foo"}b`', expected: new LiteralTemplate(['a', 'b'], [new LiteralString('foo')]) },
-        { expr: '`a${"foo"}b${"foo"}c`', expected: new LiteralTemplate(['a', 'b', 'c'], [new LiteralString('foo'), new LiteralString('foo')]) },
-        { expr: 'foo`a${"foo"}b`', expected: new LiteralTemplate(['a', 'b'], [new LiteralString('foo')], ['a', 'b'], $foo) },
-        { expr: 'foo`bar`', expected: new LiteralTemplate(['bar'], [], ['bar'], $foo) },
-        { expr: 'foo`\r\n`', expected: new LiteralTemplate(['\r\n'], [], ['\\r\\n'], $foo) }
+        { expr: '`\r\n\t\n`', expected: new TemplateExpression(['\r\n\t\n']) },
+        { expr: '`\n\r\n\r`', expected: new TemplateExpression(['\n\r\n\r']) },
+        { expr: '`x\\r\\nx`', expected: new TemplateExpression(['x\r\nx']) },
+        { expr: '`x\r\nx`', expected: new TemplateExpression(['x\r\nx']) },
+        { expr: '``', expected: new TemplateExpression(['']) },
+        { expr: '`foo`', expected: new TemplateExpression(['foo']) },
+        { expr: '`$`', expected: new TemplateExpression(['$']) },
+        { expr: '`a${foo}`', expected: new TemplateExpression(['a', ''], [$foo]) },
+        { expr: '`${ {foo: 1} }`', expected: new TemplateExpression(['', ''], [new ObjectLiteralExpression(['foo'], [$num1])]) },
+        { expr: '`a${"foo"}b`', expected: new TemplateExpression(['a', 'b'], [new PrimitiveLiteralExpression('foo')]) },
+        { expr: '`a${"foo"}b${"foo"}c`', expected: new TemplateExpression(['a', 'b', 'c'], [new PrimitiveLiteralExpression('foo'), new PrimitiveLiteralExpression('foo')]) },
+        { expr: 'foo`a${"foo"}b`', expected: new TemplateExpression(['a', 'b'], [new PrimitiveLiteralExpression('foo')], ['a', 'b'], $foo) },
+        { expr: 'foo`bar`', expected: new TemplateExpression(['bar'], [], ['bar'], $foo) },
+        { expr: 'foo`\r\n`', expected: new TemplateExpression(['\r\n'], [], ['\\r\\n'], $foo) }
       ];
 
       for (const { expr, expected } of tests) {
@@ -115,23 +115,23 @@ describe('Parser', () => {
         { expr: 'undefined', expected: $undefined },
         { expr: '0', expected: $num0 },
         { expr: '1', expected: $num1 },
-        { expr: '-1', expected: new Binary('-', $num0, $num1) },
-        { expr: '(-1)', expected: new Binary('-', $num0, $num1) },
-        { expr: '-(-1)', expected: new Binary('-', $num0, new Binary('-', $num0, $num1)) },
-        { expr: '+(-1)', expected: new Binary('-', $num0, $num1) },
-        { expr: '-(+1)', expected: new Binary('-', $num0, $num1) },
+        { expr: '-1', expected: new UnaryExpression('-', $num1) },
+        { expr: '(-1)', expected: new UnaryExpression('-', $num1) },
+        { expr: '-(-1)', expected: new UnaryExpression('-', new UnaryExpression('-', $num1)) },
+        { expr: '+(-1)', expected: new UnaryExpression('-', $num1) },
+        { expr: '-(+1)', expected: new UnaryExpression('-', $num1) },
         { expr: '+(+1)', expected: $num1 },
-        { expr: '9007199254740992', expected: new LiteralPrimitive(9007199254740992) }, // Number.MAX_SAFE_INTEGER + 1
-        { expr: '1.7976931348623157e+308', expected: new LiteralPrimitive(1.7976931348623157e+308) }, // Number.MAX_VALUE
-        { expr: '1.7976931348623157E+308', expected: new LiteralPrimitive(1.7976931348623157e+308) }, // Number.MAX_VALUE
-        { expr: '-9007199254740992', expected: new Binary('-', $num0, new LiteralPrimitive(9007199254740992)) }, // Number.MIN_SAFE_INTEGER - 1
-        { expr: '5e-324', expected: new LiteralPrimitive(5e-324) }, // Number.MIN_VALUE
-        { expr: '5E-324', expected: new LiteralPrimitive(5e-324) }, // Number.MIN_VALUE
-        { expr: '2.2', expected: new LiteralPrimitive(2.2) },
-        { expr: '2.2e2', expected: new LiteralPrimitive(2.2e2) },
-        { expr: '.42', expected: new LiteralPrimitive(.42) },
-        { expr: '0.42', expected: new LiteralPrimitive(.42) },
-        { expr: '.42E10', expected: new LiteralPrimitive(.42e10) }
+        { expr: '9007199254740992', expected: new PrimitiveLiteralExpression(9007199254740992) }, // Number.MAX_SAFE_INTEGER + 1
+        { expr: '1.7976931348623157e+308', expected: new PrimitiveLiteralExpression(1.7976931348623157e+308) }, // Number.MAX_VALUE
+        { expr: '1.7976931348623157E+308', expected: new PrimitiveLiteralExpression(1.7976931348623157e+308) }, // Number.MAX_VALUE
+        { expr: '-9007199254740992', expected: new UnaryExpression('-', new PrimitiveLiteralExpression(9007199254740992)) }, // Number.MIN_SAFE_INTEGER - 1
+        { expr: '5e-324', expected: new PrimitiveLiteralExpression(5e-324) }, // Number.MIN_VALUE
+        { expr: '5E-324', expected: new PrimitiveLiteralExpression(5e-324) }, // Number.MIN_VALUE
+        { expr: '2.2', expected: new PrimitiveLiteralExpression(2.2) },
+        { expr: '2.2e2', expected: new PrimitiveLiteralExpression(2.2e2) },
+        { expr: '.42', expected: new PrimitiveLiteralExpression(.42) },
+        { expr: '0.42', expected: new PrimitiveLiteralExpression(.42) },
+        { expr: '.42E10', expected: new PrimitiveLiteralExpression(.42e10) }
       ];
 
       for (const { expr, expected } of tests) {
@@ -143,13 +143,13 @@ describe('Parser', () => {
 
     describe('LiteralArray', () => {
       const tests = [
-        { expr: '[1 <= 0]', expected: new LiteralArray([new Binary('<=', $num1, $num0)]) },
-        { expr: '[0]', expected: new LiteralArray([$num0])},
+        { expr: '[1 <= 0]', expected: new ArrayLiteralExpression([new BinaryExpression('<=', $num1, $num0)]) },
+        { expr: '[0]', expected: new ArrayLiteralExpression([$num0])},
         { expr: '[]', expected: $arr},
-        { expr: '[[[]]]', expected: new LiteralArray([new LiteralArray([$arr])])},
-        { expr: '[[],[[]]]', expected: new LiteralArray([$arr, new LiteralArray([$arr])])},
-        { expr: '[x()]', expected: new LiteralArray([new CallScope('x', [], 0)]) },
-        { expr: '[1, "z", "a", null]', expected: new LiteralArray([$num1, new LiteralString('z'), new LiteralString('a'), $null]) }
+        { expr: '[[[]]]', expected: new ArrayLiteralExpression([new ArrayLiteralExpression([$arr])])},
+        { expr: '[[],[[]]]', expected: new ArrayLiteralExpression([$arr, new ArrayLiteralExpression([$arr])])},
+        { expr: '[x()]', expected: new ArrayLiteralExpression([new CallScopeExpression('x', [], 0)]) },
+        { expr: '[1, "z", "a", null]', expected: new ArrayLiteralExpression([$num1, new PrimitiveLiteralExpression('z'), new PrimitiveLiteralExpression('a'), $null]) }
       ];
 
       for (const { expr, expected } of tests) {
@@ -161,17 +161,17 @@ describe('Parser', () => {
 
     describe('Conditional', () => {
       const tests = [
-        { expr: '(false ? true : undefined)', paren: true, expected: new Conditional($false, $true, $undefined) },
-        { expr: '("1" ? "" : "1")', paren: true, expected: new Conditional($str1, $str, $str1) },
-        { expr: '("1" ? foo : "")', paren: true, expected: new Conditional($str1, $foo, $str) },
-        { expr: '(false ? false : true)', paren: true, expected: new Conditional($false, $false, $true) },
-        { expr: '(foo ? foo : true)', paren: true, expected: new Conditional($foo, $foo, $true) },
-        { expr: 'foo() ? 1 : 2', expected: new Conditional(new CallScope('foo', [], 0), $num1, $num2) },
-        { expr: 'true ? foo : false', expected: new Conditional($true, $foo, $false) },
-        { expr: '"1" ? "" : "1"', expected: new Conditional($str1, $str, $str1) },
-        { expr: '"1" ? foo : ""', expected: new Conditional($str1, $foo, $str) },
-        { expr: 'foo ? foo : "1"', expected: new Conditional($foo, $foo, $str1) },
-        { expr: 'true ? foo : bar', expected: new Conditional($true, $foo, $bar) }
+        { expr: '(false ? true : undefined)', paren: true, expected: new TernaryExpression($false, $true, $undefined) },
+        { expr: '("1" ? "" : "1")', paren: true, expected: new TernaryExpression($str1, $str, $str1) },
+        { expr: '("1" ? foo : "")', paren: true, expected: new TernaryExpression($str1, $foo, $str) },
+        { expr: '(false ? false : true)', paren: true, expected: new TernaryExpression($false, $false, $true) },
+        { expr: '(foo ? foo : true)', paren: true, expected: new TernaryExpression($foo, $foo, $true) },
+        { expr: 'foo() ? 1 : 2', expected: new TernaryExpression(new CallScopeExpression('foo', [], 0), $num1, $num2) },
+        { expr: 'true ? foo : false', expected: new TernaryExpression($true, $foo, $false) },
+        { expr: '"1" ? "" : "1"', expected: new TernaryExpression($str1, $str, $str1) },
+        { expr: '"1" ? foo : ""', expected: new TernaryExpression($str1, $foo, $str) },
+        { expr: 'foo ? foo : "1"', expected: new TernaryExpression($foo, $foo, $str1) },
+        { expr: 'true ? foo : bar', expected: new TernaryExpression($true, $foo, $bar) }
       ];
 
       for (const { expr, expected, paren } of tests) {
@@ -180,9 +180,9 @@ describe('Parser', () => {
         });
 
         const nestedTests = [
-          { expr: `${expr} ? a : b`, expected: paren ? new Conditional(expected, $a, $b) : new Conditional(expected.condition, expected.yes, new Conditional(<any>expected.no, $a, $b)) },
-          { expr: `a[b] ? ${expr} : a=((b))`, expected: new Conditional(new AccessKeyed($a, $b), expected, new Assign($a, $b)) },
-          { expr: `a ? !b===!a : ${expr}`, expected: new Conditional($a, new Binary('===', new Unary('!', $b), new Unary('!', $a)), expected) }
+          { expr: `${expr} ? a : b`, expected: paren ? new TernaryExpression(expected, $a, $b) : new TernaryExpression(expected.condition, expected.yes, new TernaryExpression(<any>expected.no, $a, $b)) },
+          { expr: `a[b] ? ${expr} : a=((b))`, expected: new TernaryExpression(new AccessKeyedExpression($a, $b), expected, new AssignmentExpression($a, $b)) },
+          { expr: `a ? !b===!a : ${expr}`, expected: new TernaryExpression($a, new BinaryExpression('===', new UnaryExpression('!', $b), new UnaryExpression('!', $a)), expected) }
         ];
 
         for (const { expr: nExpr, expected: nExpected } of nestedTests) {
@@ -196,14 +196,14 @@ describe('Parser', () => {
     describe('Binary', () => {
       for (const op of binaryOps) {
         it(`\"${op}\"`, () => {
-          verifyEqual(parser.parse(`x ${op} y`), new Binary(op, $x, $y));
+          verifyEqual(parser.parse(`x ${op} y`), new BinaryExpression(op, $x, $y));
         });
       }
     });
 
     describe('Binary operator precedence', () => {
-      const x = [0, 1, 2, 3, 4, 5, 6].map(i => new AccessScope(`x${i}`, 0));
-      const b = (l: any, op: any, r: any) => new Binary(op, l, r);
+      const x = [0, 1, 2, 3, 4, 5, 6].map(i => new AccessScopeExpression(`x${i}`, 0));
+      const b = (l: any, op: any, r: any) => new BinaryExpression(op, l, r);
       const prec1 = ['||'];
       const prec2 = ['&&'];
       const prec3 = ['==', '!=', '===', '!=='];
@@ -257,8 +257,8 @@ describe('Parser', () => {
     describe('Binary + Unary operator precedence', () => {
       const x = $x;
       const y = $y;
-      const u = (op: any, r: any) => op === '!' ? new Unary(op, r) : new Unary(op, r);
-      const b = (l: any, op: any, r: any) => new Binary(op, l, r);
+      const u = (op: any, r: any) => op === '!' ? new UnaryExpression(op, r) : new UnaryExpression(op, r);
+      const b = (l: any, op: any, r: any) => new BinaryExpression(op, l, r);
 
       for (const _b of binaryOps) {
         for (const _u of unaryOps) {
@@ -292,14 +292,14 @@ describe('Parser', () => {
     });
 
     const variadics = [
-      { ctor: BindingBehavior, op: '&' },
-      { ctor: ValueConverter, op: '|' }
+      { ctor: BindingBehaviorExpression, op: '&' },
+      { ctor: ValueConverterExpression, op: '|' }
     ];
 
     for (const { ctor: Variadic, op } of variadics) {
-      const $this0 = new AccessThis(0);
-      const $this1 = new AccessThis(1);
-      const $this2 = new AccessThis(2);
+      const $this0 = new AccessThisExpression(0);
+      const $this1 = new AccessThisExpression(1);
+      const $this2 = new AccessThisExpression(2);
 
       describe(Variadic.name, () => {
         const tests = [
@@ -307,12 +307,12 @@ describe('Parser', () => {
           { expr: `foo${op}bar:$this:$parent`, expected: new Variadic($foo, 'bar', [$this0, $this1]) },
           { expr: `foo${op}bar:$parent:$this`, expected: new Variadic($foo, 'bar', [$this1, $this0]) },
           { expr: `foo${op}bar:$parent.$parent:$parent.$parent`, expected: new Variadic($foo, 'bar', [$this2, $this2]) },
-          { expr: `foo${op}bar:"1"?"":"1":true?foo:bar`, expected: new Variadic($foo, 'bar', [new Conditional($str1, $str, $str1), new Conditional($true, $foo, $bar)]) },
-          { expr: `foo${op}bar:[1<=0]:[[],[[]]]`, expected: new Variadic($foo, 'bar', [new LiteralArray([new Binary('<=', $num1, $num0)]), new LiteralArray([$arr, new LiteralArray([$arr])])]) },
-          { expr: `foo${op}bar:{foo:a?b:c}:{1:1}`, expected: new Variadic($foo, 'bar', [new LiteralObject(['foo'], [new Conditional($a, $b, $c)]), new LiteralObject([1], [$num1])]) },
-          { expr: `foo${op}bar:a(b({})[c()[d()]])`, expected: new Variadic($foo, 'bar', [new CallScope('a', [new AccessKeyed(new CallScope('b', [$obj], 0), new AccessKeyed(new CallScope('c', [], 0), new CallScope('d', [], 0)))], 0)]) },
-          { expr: `a(b({})[c()[d()]])${op}bar`, expected: new Variadic(new CallScope('a', [new AccessKeyed(new CallScope('b', [$obj], 0), new AccessKeyed(new CallScope('c', [], 0), new CallScope('d', [], 0)))], 0), 'bar', []) },
-          { expr: `true?foo:bar${op}bar`, expected: new Variadic(new Conditional($true, $foo, $bar), 'bar', []) },
+          { expr: `foo${op}bar:"1"?"":"1":true?foo:bar`, expected: new Variadic($foo, 'bar', [new TernaryExpression($str1, $str, $str1), new TernaryExpression($true, $foo, $bar)]) },
+          { expr: `foo${op}bar:[1<=0]:[[],[[]]]`, expected: new Variadic($foo, 'bar', [new ArrayLiteralExpression([new BinaryExpression('<=', $num1, $num0)]), new ArrayLiteralExpression([$arr, new ArrayLiteralExpression([$arr])])]) },
+          { expr: `foo${op}bar:{foo:a?b:c}:{1:1}`, expected: new Variadic($foo, 'bar', [new ObjectLiteralExpression(['foo'], [new TernaryExpression($a, $b, $c)]), new ObjectLiteralExpression([1], [$num1])]) },
+          { expr: `foo${op}bar:a(b({})[c()[d()]])`, expected: new Variadic($foo, 'bar', [new CallScopeExpression('a', [new AccessKeyedExpression(new CallScopeExpression('b', [$obj], 0), new AccessKeyedExpression(new CallScopeExpression('c', [], 0), new CallScopeExpression('d', [], 0)))], 0)]) },
+          { expr: `a(b({})[c()[d()]])${op}bar`, expected: new Variadic(new CallScopeExpression('a', [new AccessKeyedExpression(new CallScopeExpression('b', [$obj], 0), new AccessKeyedExpression(new CallScopeExpression('c', [], 0), new CallScopeExpression('d', [], 0)))], 0), 'bar', []) },
+          { expr: `true?foo:bar${op}bar`, expected: new Variadic(new TernaryExpression($true, $foo, $bar), 'bar', []) },
           { expr: `$parent.$parent${op}bar`, expected: new Variadic($this2, 'bar', []) }
         ];
 
@@ -326,17 +326,17 @@ describe('Parser', () => {
 
     it('chained BindingBehaviors', () => {
       const expr = parser.parse('foo & bar:x:y:z & baz:a:b:c');
-      verifyEqual(expr, new BindingBehavior(new BindingBehavior($foo, 'bar', [$x, $y, $z]), 'baz', [$a, $b, $c]));
+      verifyEqual(expr, new BindingBehaviorExpression(new BindingBehaviorExpression($foo, 'bar', [$x, $y, $z]), 'baz', [$a, $b, $c]));
     });
 
     it('chained ValueConverters', () => {
       const expr = parser.parse('foo | bar:x:y:z | baz:a:b:c');
-      verifyEqual(expr, new ValueConverter(new ValueConverter($foo, 'bar', [$x, $y, $z]), 'baz', [$a, $b, $c]));
+      verifyEqual(expr, new ValueConverterExpression(new ValueConverterExpression($foo, 'bar', [$x, $y, $z]), 'baz', [$a, $b, $c]));
     });
 
     it('chained ValueConverters and BindingBehaviors', () => {
       const expr = parser.parse('foo | bar:x:y:z & baz:a:b:c');
-      verifyEqual(expr, new BindingBehavior(new ValueConverter($foo, 'bar', [$x, $y, $z]), 'baz', [$a, $b, $c]));
+      verifyEqual(expr, new BindingBehaviorExpression(new ValueConverterExpression($foo, 'bar', [$x, $y, $z]), 'baz', [$a, $b, $c]));
     });
 
     it('AccessScope', () => {
@@ -346,16 +346,16 @@ describe('Parser', () => {
 
     describe('AccessKeyed', () => {
       const tests = [
-        { expr: 'foo[bar]', expected: new AccessKeyed($foo, $bar) },
-        { expr: 'foo[\'bar\']', expected: new AccessKeyed($foo, new LiteralString('bar')) },
-        { expr: 'foo[0]', expected: new AccessKeyed($foo, $num0) },
-        { expr: 'foo[(0)]', expected: new AccessKeyed($foo, $num0) },
-        { expr: '(foo)[0]', expected: new AccessKeyed($foo, $num0) },
-        { expr: 'foo[null]', expected: new AccessKeyed($foo, $null) },
-        { expr: '\'foo\'[0]', expected: new AccessKeyed(new LiteralString('foo'), $num0) },
-        { expr: 'foo()[bar]', expected: new AccessKeyed(new CallScope('foo', [], 0), $bar) },
-        { expr: 'a[b[c]]', expected: new AccessKeyed($a, new AccessKeyed($b, $c)) },
-        { expr: 'a[b][c]', expected: new AccessKeyed(new AccessKeyed($a, $b), $c) }
+        { expr: 'foo[bar]', expected: new AccessKeyedExpression($foo, $bar) },
+        { expr: 'foo[\'bar\']', expected: new AccessKeyedExpression($foo, new PrimitiveLiteralExpression('bar')) },
+        { expr: 'foo[0]', expected: new AccessKeyedExpression($foo, $num0) },
+        { expr: 'foo[(0)]', expected: new AccessKeyedExpression($foo, $num0) },
+        { expr: '(foo)[0]', expected: new AccessKeyedExpression($foo, $num0) },
+        { expr: 'foo[null]', expected: new AccessKeyedExpression($foo, $null) },
+        { expr: '\'foo\'[0]', expected: new AccessKeyedExpression(new PrimitiveLiteralExpression('foo'), $num0) },
+        { expr: 'foo()[bar]', expected: new AccessKeyedExpression(new CallScopeExpression('foo', [], 0), $bar) },
+        { expr: 'a[b[c]]', expected: new AccessKeyedExpression($a, new AccessKeyedExpression($b, $c)) },
+        { expr: 'a[b][c]', expected: new AccessKeyedExpression(new AccessKeyedExpression($a, $b), $c) }
       ];
 
       for (const { expr, expected } of tests) {
@@ -371,18 +371,18 @@ describe('Parser', () => {
 
     describe('AccessMember', () => {
       const tests = [
-        { expr: 'foo.bar', expected: new AccessMember($foo, 'bar') },
-        { expr: 'foo.bar.baz.qux', expected: new AccessMember(new AccessMember(new AccessMember($foo, 'bar'), 'baz'), 'qux') },
-        { expr: 'foo["bar"].baz', expected: new AccessMember(new AccessKeyed($foo, new LiteralString('bar')), 'baz') },
-        { expr: 'foo[""].baz', expected: new AccessMember(new AccessKeyed($foo, $str), 'baz') },
-        { expr: 'foo[null].baz', expected: new AccessMember(new AccessKeyed($foo, $null), 'baz') },
-        { expr: 'foo[42].baz', expected: new AccessMember(new AccessKeyed($foo, new LiteralPrimitive(42)), 'baz') },
-        { expr: '{}.foo', expected: new AccessMember($obj, 'foo') },
-        { expr: '[].foo', expected: new AccessMember($arr, 'foo') },
-        { expr: 'null.foo', expected: new AccessMember($null, 'foo') },
-        { expr: 'undefined.foo', expected: new AccessMember($undefined, 'foo') },
-        { expr: 'true.foo', expected: new AccessMember($true, 'foo') },
-        { expr: 'false.foo', expected: new AccessMember($false, 'foo') }
+        { expr: 'foo.bar', expected: new AccessMemberExpression($foo, 'bar') },
+        { expr: 'foo.bar.baz.qux', expected: new AccessMemberExpression(new AccessMemberExpression(new AccessMemberExpression($foo, 'bar'), 'baz'), 'qux') },
+        { expr: 'foo["bar"].baz', expected: new AccessMemberExpression(new AccessKeyedExpression($foo, new PrimitiveLiteralExpression('bar')), 'baz') },
+        { expr: 'foo[""].baz', expected: new AccessMemberExpression(new AccessKeyedExpression($foo, $str), 'baz') },
+        { expr: 'foo[null].baz', expected: new AccessMemberExpression(new AccessKeyedExpression($foo, $null), 'baz') },
+        { expr: 'foo[42].baz', expected: new AccessMemberExpression(new AccessKeyedExpression($foo, new PrimitiveLiteralExpression(42)), 'baz') },
+        { expr: '{}.foo', expected: new AccessMemberExpression($obj, 'foo') },
+        { expr: '[].foo', expected: new AccessMemberExpression($arr, 'foo') },
+        { expr: 'null.foo', expected: new AccessMemberExpression($null, 'foo') },
+        { expr: 'undefined.foo', expected: new AccessMemberExpression($undefined, 'foo') },
+        { expr: 'true.foo', expected: new AccessMemberExpression($true, 'foo') },
+        { expr: 'false.foo', expected: new AccessMemberExpression($false, 'foo') }
       ];
 
       for (const { expr, expected } of tests) {
@@ -394,27 +394,27 @@ describe('Parser', () => {
 
     it('Assign', () => {
       const expr = parser.parse('foo = bar');
-      verifyEqual(expr, new Assign($foo, $bar));
+      verifyEqual(expr, new AssignmentExpression($foo, $bar));
     });
 
     it('Assign to ignored Unary', () => {
       const expr = parser.parse('+foo = bar');
-      verifyEqual(expr, new Assign($foo, $bar));
+      verifyEqual(expr, new AssignmentExpression($foo, $bar));
     });
 
     it('chained Assign', () => {
       const expr = parser.parse('foo = bar = baz');
-      verifyEqual(expr, new Assign(new Assign($foo, $bar), $baz));
+      verifyEqual(expr, new AssignmentExpression(new AssignmentExpression($foo, $bar), $baz));
     });
 
     describe('CallExpression', () => {
       const tests = [
-        { expr: 'a()()()', expected: new CallFunction(new CallFunction(new CallScope('a', [], 0), []), []) },
-        { expr: 'a(b(c()))', expected: new CallScope('a', [new CallScope('b', [new CallScope('c', [], 0)], 0)], 0) },
-        { expr: 'a(b(),c())', expected: new CallScope('a', [new CallScope('b', [], 0), new CallScope('c', [], 0)], 0) },
-        { expr: 'a()[b]()', expected: new CallFunction(new AccessKeyed(new CallScope('a', [], 0), $b), []) },
-        { expr: '{foo}[\'foo\']()', expected: new CallFunction(new AccessKeyed(new LiteralObject(['foo'], [$foo]), new LiteralString('foo')), []) },
-        { expr: 'a(b({})[c()[d()]])', expected: new CallScope('a', [new AccessKeyed(new CallScope('b', [$obj], 0), new AccessKeyed(new CallScope('c', [], 0), new CallScope('d', [], 0)))], 0) }
+        { expr: 'a()()()', expected: new CallFunctionExpression(new CallFunctionExpression(new CallScopeExpression('a', [], 0), []), []) },
+        { expr: 'a(b(c()))', expected: new CallScopeExpression('a', [new CallScopeExpression('b', [new CallScopeExpression('c', [], 0)], 0)], 0) },
+        { expr: 'a(b(),c())', expected: new CallScopeExpression('a', [new CallScopeExpression('b', [], 0), new CallScopeExpression('c', [], 0)], 0) },
+        { expr: 'a()[b]()', expected: new CallFunctionExpression(new AccessKeyedExpression(new CallScopeExpression('a', [], 0), $b), []) },
+        { expr: '{foo}[\'foo\']()', expected: new CallFunctionExpression(new AccessKeyedExpression(new ObjectLiteralExpression(['foo'], [$foo]), new PrimitiveLiteralExpression('foo')), []) },
+        { expr: 'a(b({})[c()[d()]])', expected: new CallScopeExpression('a', [new AccessKeyedExpression(new CallScopeExpression('b', [$obj], 0), new AccessKeyedExpression(new CallScopeExpression('c', [], 0), new CallScopeExpression('d', [], 0)))], 0) }
       ];
 
       for (const { expr, expected } of tests) {
@@ -430,27 +430,27 @@ describe('Parser', () => {
 
     it('CallScope', () => {
       const expr = parser.parse('foo(x)');
-      verifyEqual(expr, new CallScope('foo', [$x], 0));
+      verifyEqual(expr, new CallScopeExpression('foo', [$x], 0));
     });
 
     it('nested CallScope', () => {
       const expr = parser.parse('foo(bar(x), y)');
-      verifyEqual(expr, new CallScope('foo', [new CallScope('bar', [$x], 0), $y], 0));
+      verifyEqual(expr, new CallScopeExpression('foo', [new CallScopeExpression('bar', [$x], 0), $y], 0));
     });
 
     it('CallMember', () => {
       const expr = parser.parse('foo.bar(x)');
-      verifyEqual(expr, new CallMember($foo, 'bar', [$x]));
+      verifyEqual(expr, new CallMemberExpression($foo, 'bar', [$x]));
     });
 
     it('nested CallMember', () => {
       const expr = parser.parse('foo.bar.baz(x)');
-      verifyEqual(expr, new CallMember(new AccessMember($foo, 'bar'), 'baz', [$x]));
+      verifyEqual(expr, new CallMemberExpression(new AccessMemberExpression($foo, 'bar'), 'baz', [$x]));
     });
 
     it('$this', () => {
       const expr = parser.parse('$this');
-      verifyEqual(expr, new AccessThis(0));
+      verifyEqual(expr, new AccessThisExpression(0));
     });
 
     it('$this.member to AccessScope', () => {
@@ -460,12 +460,12 @@ describe('Parser', () => {
 
     it('$this() to CallFunction', () => {
       const expr = parser.parse('$this()');
-      verifyEqual(expr, new CallFunction(new AccessThis(0), []));
+      verifyEqual(expr, new CallFunctionExpression(new AccessThisExpression(0), []));
     });
 
     it('$this.member() to CallScope', () => {
       const expr = parser.parse('$this.foo(x)');
-      verifyEqual(expr, new CallScope('foo', [$x], 0));
+      verifyEqual(expr, new CallScopeExpression('foo', [$x], 0));
     });
 
     const parents = [
@@ -484,84 +484,84 @@ describe('Parser', () => {
       for (const { i, name } of parents) {
         it(name, () => {
           const expr = parser.parse(name);
-          verifyEqual(expr, new AccessThis(i));
+          verifyEqual(expr, new AccessThisExpression(i));
         });
 
         it(`${name} before ValueConverter`, () => {
           const expr = parser.parse(`${name} | foo`);
-          verifyEqual(expr, new ValueConverter(new AccessThis(i), 'foo', []));
+          verifyEqual(expr, new ValueConverterExpression(new AccessThisExpression(i), 'foo', []));
         });
 
         it(`${name}.bar before ValueConverter`, () => {
           const expr = parser.parse(`${name}.bar | foo`);
-          verifyEqual(expr, new ValueConverter(new AccessScope('bar', i), 'foo', []));
+          verifyEqual(expr, new ValueConverterExpression(new AccessScopeExpression('bar', i), 'foo', []));
         });
 
         it(`${name} before binding behavior`, () => {
           const expr = parser.parse(`${name} & foo`);
-          verifyEqual(expr, new BindingBehavior(new AccessThis(i), 'foo', []));
+          verifyEqual(expr, new BindingBehaviorExpression(new AccessThisExpression(i), 'foo', []));
         });
 
         it(`${name}.bar before binding behavior`, () => {
           const expr = parser.parse(`${name}.bar & foo`);
-          verifyEqual(expr, new BindingBehavior(new AccessScope('bar', i), 'foo', []));
+          verifyEqual(expr, new BindingBehaviorExpression(new AccessScopeExpression('bar', i), 'foo', []));
         });
 
         it(`${name}.foo to AccessScope`, () => {
           const expr = parser.parse(`${name}.foo`);
-          verifyEqual(expr, new AccessScope(`foo`, i));
+          verifyEqual(expr, new AccessScopeExpression(`foo`, i));
         });
 
         it(`${name}.foo() to CallScope`, () => {
           const expr = parser.parse(`${name}.foo()`);
-          verifyEqual(expr, new CallScope(`foo`, [], i));
+          verifyEqual(expr, new CallScopeExpression(`foo`, [], i));
         });
 
         it(`${name}() to CallFunction`, () => {
           const expr = parser.parse(`${name}()`);
-          verifyEqual(expr, new CallFunction(new AccessThis(i), []));
+          verifyEqual(expr, new CallFunctionExpression(new AccessThisExpression(i), []));
         });
 
         it(`${name}[0] to AccessKeyed`, () => {
           const expr = parser.parse(`${name}[0]`);
-          verifyEqual(expr, new AccessKeyed(new AccessThis(i), $num0));
+          verifyEqual(expr, new AccessKeyedExpression(new AccessThisExpression(i), $num0));
         });
       }
     });
 
     it('$parent inside CallMember', () => {
       const expr = parser.parse('matcher.bind($parent)');
-      verifyEqual(expr, new CallMember(new AccessScope('matcher', 0), 'bind', [new AccessThis(1)]));
+      verifyEqual(expr, new CallMemberExpression(new AccessScopeExpression('matcher', 0), 'bind', [new AccessThisExpression(1)]));
     });
 
     it('$parent in LiteralObject', () => {
       const expr = parser.parse('{parent: $parent}');
-      verifyEqual(expr, new LiteralObject(['parent'], [new AccessThis(1)]));
+      verifyEqual(expr, new ObjectLiteralExpression(['parent'], [new AccessThisExpression(1)]));
     });
 
     it('$parent and foo in LiteralObject', () => {
       const expr = parser.parse('{parent: $parent, foo: bar}');
-      verifyEqual(expr, new LiteralObject(['parent', 'foo'], [new AccessThis(1), $bar]));
+      verifyEqual(expr, new ObjectLiteralExpression(['parent', 'foo'], [new AccessThisExpression(1), $bar]));
     });
 
     describe('LiteralObject', () => {
       const tests = [
         { expr: '', expected: $obj },
-        { expr: 'foo', expected: new LiteralObject(['foo'], [$foo]) },
-        { expr: 'foo,bar', expected: new LiteralObject(['foo', 'bar'], [$foo, $bar]) },
-        { expr: 'foo:bar', expected: new LiteralObject(['foo'], [$bar]) },
-        { expr: 'foo:bar()', expected: new LiteralObject(['foo'], [new CallScope('bar', [], 0)]) },
-        { expr: 'foo:a?b:c', expected: new LiteralObject(['foo'], [new Conditional($a, $b, $c)]) },
-        { expr: 'foo:bar=((baz))', expected: new LiteralObject(['foo'], [new Assign($bar, $baz)]) },
-        { expr: 'foo:(bar)===baz', expected: new LiteralObject(['foo'], [new Binary('===', $bar, $baz)]) },
-        { expr: 'foo:[bar]', expected: new LiteralObject(['foo'], [new LiteralArray([$bar])]) },
-        { expr: 'foo:bar[baz]', expected: new LiteralObject(['foo'], [new AccessKeyed($bar, $baz)]) },
-        { expr: '\'foo\':1', expected: new LiteralObject(['foo'], [$num1]) },
-        { expr: '1:1', expected: new LiteralObject([1], [$num1]) },
-        { expr: '1:\'foo\'', expected: new LiteralObject([1], [new LiteralString('foo')]) },
-        { expr: 'null:1', expected: new LiteralObject(['null'], [$num1]) },
-        { expr: 'foo:{}', expected: new LiteralObject(['foo'], [$obj]) },
-        { expr: 'foo:{bar}[baz]', expected: new LiteralObject(['foo'], [new AccessKeyed(new LiteralObject(['bar'], [$bar]), $baz)]) }
+        { expr: 'foo', expected: new ObjectLiteralExpression(['foo'], [$foo]) },
+        { expr: 'foo,bar', expected: new ObjectLiteralExpression(['foo', 'bar'], [$foo, $bar]) },
+        { expr: 'foo:bar', expected: new ObjectLiteralExpression(['foo'], [$bar]) },
+        { expr: 'foo:bar()', expected: new ObjectLiteralExpression(['foo'], [new CallScopeExpression('bar', [], 0)]) },
+        { expr: 'foo:a?b:c', expected: new ObjectLiteralExpression(['foo'], [new TernaryExpression($a, $b, $c)]) },
+        { expr: 'foo:bar=((baz))', expected: new ObjectLiteralExpression(['foo'], [new AssignmentExpression($bar, $baz)]) },
+        { expr: 'foo:(bar)===baz', expected: new ObjectLiteralExpression(['foo'], [new BinaryExpression('===', $bar, $baz)]) },
+        { expr: 'foo:[bar]', expected: new ObjectLiteralExpression(['foo'], [new ArrayLiteralExpression([$bar])]) },
+        { expr: 'foo:bar[baz]', expected: new ObjectLiteralExpression(['foo'], [new AccessKeyedExpression($bar, $baz)]) },
+        { expr: '\'foo\':1', expected: new ObjectLiteralExpression(['foo'], [$num1]) },
+        { expr: '1:1', expected: new ObjectLiteralExpression([1], [$num1]) },
+        { expr: '1:\'foo\'', expected: new ObjectLiteralExpression([1], [new PrimitiveLiteralExpression('foo')]) },
+        { expr: 'null:1', expected: new ObjectLiteralExpression(['null'], [$num1]) },
+        { expr: 'foo:{}', expected: new ObjectLiteralExpression(['foo'], [$obj]) },
+        { expr: 'foo:{bar}[baz]', expected: new ObjectLiteralExpression(['foo'], [new AccessKeyedExpression(new ObjectLiteralExpression(['bar'], [$bar]), $baz)]) }
       ];
 
       for (const { expr, expected } of tests) {
@@ -580,7 +580,7 @@ describe('Parser', () => {
         it(char, () => {
           const expr = parser.parse(char);
           verifyEqual(expr,
-            new AccessScope(char, 0)
+            new AccessScopeExpression(char, 0)
          );
         });
       }
@@ -592,7 +592,7 @@ describe('Parser', () => {
           const identifier = '$' + char;
           const expr = parser.parse(identifier);
           verifyEqual(expr,
-            new AccessScope(identifier, 0)
+            new AccessScopeExpression(identifier, 0)
          );
         });
       }

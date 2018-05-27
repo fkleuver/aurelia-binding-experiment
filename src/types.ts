@@ -1,4 +1,4 @@
-import { Expression } from './ast';
+import { AureliaExpression } from './ast';
 
 export interface OverrideContext {
   parentOverrideContext: OverrideContext | null;
@@ -17,7 +17,7 @@ export interface LookupFunctions {
 
 export interface Binding {
   mode?: bindingMode;
-  sourceExpression?: Expression;
+  sourceExpression?: AureliaExpression;
   isBound: boolean;
   source: Scope;
   updateTarget?(value: any): void;

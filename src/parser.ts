@@ -1,9 +1,10 @@
 import {
-  Chain, ValueConverter, Assign, Conditional,
-  AccessThis, AccessScope, AccessMember, AccessKeyed,
-  CallScope, CallFunction, CallMember,
-  Unary, BindingBehavior, Binary,
-  LiteralPrimitive, LiteralArray, LiteralObject, LiteralString, LiteralTemplate, Expression
+  ExpressionChain, ValueConverterExpression, AssignmentExpression, TernaryExpression,
+  AccessThisExpression, AccessScopeExpression, AccessMemberExpression, AccessKeyedExpression,
+  CallScopeExpression, CallFunctionExpression, CallMemberExpression,
+  UnaryExpression, BindingBehaviorExpression, BinaryExpression,
+  PrimitiveLiteralExpression, ArrayLiteralExpression, ObjectLiteralExpression, TemplateExpression,
+  AureliaExpression, LeftHandSideExpression, Expression, StandardExpression, StandardNonAssignmentExpression
 } from './ast';
 
 export class Parser {
@@ -19,7 +20,7 @@ export class Parser {
   }
 }
 
-export class ParserState {
+class ParserState {
   public index: number;
   public startIndex: number;
   public input: string;
@@ -44,7 +45,7 @@ export class ParserState {
   }
 }
 
-export function parseChain(state: ParserState): Chain | ReturnType<typeof parseBindingBehavior> {
+function parseChain(state: ParserState): Expression {
   nextToken(state);
   const expressions = [];
 
@@ -59,26 +60,26 @@ export function parseChain(state: ParserState): Chain | ReturnType<typeof parseB
       error(state, `Unconsumed token ${state.tokenRaw}`);
     }
   }
-  return (expressions.length === 1) ? expressions[0] : new Chain(expressions);
+  return (expressions.length === 1) ? expressions[0] : new ExpressionChain(expressions);
 }
 
-export function parseBindingBehavior(state: ParserState): BindingBehavior | ReturnType<typeof parseValueConverter> {
-  let result: BindingBehavior | ReturnType<typeof parseValueConverter> = parseValueConverter(state);
+function parseBindingBehavior(state: ParserState): AureliaExpression {
+  let result: AureliaExpression = parseValueConverter(state);
   while (optional(state, Token.Ampersand)) {
-    result = new BindingBehavior(result, <string>state.tokenValue, parseVariadicArguments(state));
+    result = new BindingBehaviorExpression(result, <string>state.tokenValue, parseVariadicArguments(state));
   }
   return result;
 }
 
-export function parseValueConverter(state: ParserState): ValueConverter | ReturnType<typeof parseExpression> {
-  let result: ValueConverter | ReturnType<typeof parseExpression> = parseExpression(state);
+function parseValueConverter(state: ParserState): ValueConverterExpression | StandardExpression {
+  let result: ValueConverterExpression | StandardExpression = parseExpression(state);
   while (optional(state, Token.Bar)) {
-    result = new ValueConverter(result, <string>state.tokenValue, parseVariadicArguments(state));
+    result = new ValueConverterExpression(result, <string>state.tokenValue, parseVariadicArguments(state));
   }
   return result;
 }
 
-export function parseVariadicArguments(state: ParserState): Array<ReturnType<typeof parseExpression>> {
+function parseVariadicArguments(state: ParserState): Array<StandardExpression> {
   nextToken(state);
   const result = [];
   while (optional(state, Token.Colon)) {
@@ -87,9 +88,9 @@ export function parseVariadicArguments(state: ParserState): Array<ReturnType<typ
   return result;
 }
 
-export function parseExpression(state: ParserState): Assign | ReturnType<typeof parseConditional> {
+function parseExpression(state: ParserState): StandardExpression {
   let exprStart = state.index;
-  let result: ReturnType<typeof parseExpression> = parseConditional(state);
+  let result: StandardExpression = parseConditional(state);
 
   while (state.currentToken === Token.Equals) {
     if (!result.isAssignable) {
@@ -97,24 +98,24 @@ export function parseExpression(state: ParserState): Assign | ReturnType<typeof 
     }
     nextToken(state);
     exprStart = state.index;
-    result = new Assign(result, parseConditional(state));
+    result = new AssignmentExpression(result, parseConditional(state));
   }
   return result;
 }
 
-export function parseConditional(state: ParserState): Conditional | ReturnType<typeof parseBinary> {
-  let result: ReturnType<typeof parseConditional> = parseBinary(state, 0);
+function parseConditional(state: ParserState): StandardExpression {
+  let result: StandardNonAssignmentExpression = parseBinary(state, 0);
 
   if (optional(state, Token.Question)) {
     const yes = parseExpression(state);
     expect(state, Token.Colon);
-    result = new Conditional(result, yes, parseExpression(state));
+    result = new TernaryExpression(result, yes, parseExpression(state));
   }
   return result;
 }
 
-export function parseBinary(state: ParserState, minPrecedence: number): Binary | ReturnType<typeof parseLeftHandSide> {
-  let left = parseLeftHandSide(state, 0);
+function parseBinary(state: ParserState, minPrecedence: number): BinaryExpression | LeftHandSideExpression {
+  let left: BinaryExpression | LeftHandSideExpression = parseLeftHandSide(state, 0);
 
   while (state.currentToken & Token.BinaryOp) {
     const opToken = state.currentToken;
@@ -122,13 +123,13 @@ export function parseBinary(state: ParserState, minPrecedence: number): Binary |
       break;
     }
     nextToken(state);
-    left = new Binary(<string>TokenValues[opToken & Token.TokenMask], left, parseBinary(state, opToken & Token.Precedence));
+    left = new BinaryExpression(<string>TokenValues[opToken & Token.TokenMask], left, parseBinary(state, opToken & Token.Precedence));
   }
   return left;
 }
 
-export function parseLeftHandSide(state: ParserState, context: Context): Binary | Unary | AccessThis | AccessScope | AccessMember | AccessKeyed | LiteralArray | LiteralObject | LiteralPrimitive | LiteralString | LiteralTemplate | CallFunction | CallMember | CallScope {
-  let result: ReturnType<typeof parseExpression> = undefined as any;
+function parseLeftHandSide(state: ParserState, context: Context): LeftHandSideExpression {
+  let result: StandardExpression = undefined as any;
 
   // Unary + Primary expression
   primary: switch (state.currentToken) {
@@ -136,14 +137,12 @@ export function parseLeftHandSide(state: ParserState, context: Context): Binary 
     nextToken(state);
     return parseLeftHandSide(state, 0);
   case Token.Minus:
-    nextToken(state);
-    return new Binary('-', new LiteralPrimitive(0), parseLeftHandSide(state, 0));
   case Token.Exclamation:
   case Token.TypeofKeyword:
   case Token.VoidKeyword:
     const op = TokenValues[state.currentToken & Token.TokenMask];
     nextToken(state);
-    return new Unary(<any>op, parseLeftHandSide(state, 0));
+    return new UnaryExpression(<any>op, parseLeftHandSide(state, 0));
   case Token.ParentScope: // $parent
     {
       do {
@@ -155,7 +154,7 @@ export function parseLeftHandSide(state: ParserState, context: Context): Binary 
           }
           continue;
         } else if (state.currentToken & Token.AccessScopeTerminal) {
-          result = new AccessThis(context & Context.Ancestor);
+          result = new AccessThisExpression(context & Context.Ancestor);
           // Keep the ShorthandProp flag, clear all the others, and set context to This
           context = (context & Context.ShorthandProp) | Context.This;
           break primary;
@@ -167,14 +166,14 @@ export function parseLeftHandSide(state: ParserState, context: Context): Binary 
   // falls through
   case Token.Identifier: // identifier
     {
-      result = new AccessScope(<string>state.tokenValue, context & Context.Ancestor);
+      result = new AccessScopeExpression(<string>state.tokenValue, context & Context.Ancestor);
       nextToken(state);
       context = (context & Context.ShorthandProp) | Context.Scope;
       break;
     }
   case Token.ThisScope: // $this
     nextToken(state);
-    result = new AccessThis(0);
+    result = new AccessThisExpression(0);
     context = (context & Context.ShorthandProp) | Context.This;
     break;
   case Token.OpenParen: // parenthesized expression
@@ -192,7 +191,7 @@ export function parseLeftHandSide(state: ParserState, context: Context): Binary 
         } while (optional(state, Token.Comma));
       }
       expect(state, Token.CloseBracket);
-      result = new LiteralArray(elements);
+      result = new ArrayLiteralExpression(elements);
       break;
     }
   case Token.OpenBrace: // object
@@ -227,15 +226,15 @@ export function parseLeftHandSide(state: ParserState, context: Context): Binary 
         }
       }
       expect(state, Token.CloseBrace);
-      result = new LiteralObject(keys, values);
+      result = new ObjectLiteralExpression(keys, values);
       break;
     }
   case Token.StringLiteral:
-    result = new LiteralString(<string>state.tokenValue);
+    result = new PrimitiveLiteralExpression(<string>state.tokenValue);
     nextToken(state);
     break;
   case Token.TemplateTail:
-    result = new LiteralTemplate([<string>state.tokenValue], undefined, undefined, undefined);
+    result = new TemplateExpression([<string>state.tokenValue], undefined, undefined, undefined);
     nextToken(state);
     break;
   case Token.TemplateContinuation:
@@ -243,7 +242,7 @@ export function parseLeftHandSide(state: ParserState, context: Context): Binary 
     break;
   case Token.NumericLiteral:
     {
-      result = new LiteralPrimitive(<any>state.tokenValue);
+      result = new PrimitiveLiteralExpression(<any>state.tokenValue);
       nextToken(state);
       break;
     }
@@ -251,7 +250,7 @@ export function parseLeftHandSide(state: ParserState, context: Context): Binary 
   case Token.UndefinedKeyword:
   case Token.TrueKeyword:
   case Token.FalseKeyword:
-    result = new LiteralPrimitive(<any>TokenValues[state.currentToken & Token.TokenMask]);
+    result = new PrimitiveLiteralExpression(<any>TokenValues[state.currentToken & Token.TokenMask]);
     nextToken(state);
     break;
   default:
@@ -283,15 +282,15 @@ export function parseLeftHandSide(state: ParserState, context: Context): Binary 
         continue;
       }
       if (context & Context.Scope) {
-        result = new AccessScope(<string>name, (<any>result).ancestor);
+        result = new AccessScopeExpression(<string>name, (<any>result).ancestor);
       } else { // if it's not $Scope, it's $Member
-        result = new AccessMember(result, <string>name);
+        result = new AccessMemberExpression(result, <string>name);
       }
       continue;
     case Token.OpenBracket:
       nextToken(state);
       context = Context.Keyed;
-      result = new AccessKeyed(result, parseExpression(state));
+      result = new AccessKeyedExpression(result, parseExpression(state));
       expect(state, Token.CloseBracket);
       break;
     case Token.OpenParen:
@@ -305,16 +304,16 @@ export function parseLeftHandSide(state: ParserState, context: Context): Binary 
       }
       expect(state, Token.CloseParen);
       if (context & Context.Scope) {
-        result = new CallScope(<string>name, args, (<any>result).ancestor);
+        result = new CallScopeExpression(<string>name, args, (<any>result).ancestor);
       } else if (context & Context.Member) {
-        result = new CallMember(result, <string>name, args);
+        result = new CallMemberExpression(result, <string>name, args);
       } else {
-        result = new CallFunction(result, args);
+        result = new CallFunctionExpression(result, args);
       }
       context = 0;
       break;
     case Token.TemplateTail:
-      result = new LiteralTemplate([<string>state.tokenValue], [], [state.tokenRaw], result);
+      result = new TemplateExpression([<string>state.tokenValue], [], [state.tokenRaw], result);
       nextToken(state);
       break;
     case Token.TemplateContinuation:
@@ -326,7 +325,7 @@ export function parseLeftHandSide(state: ParserState, context: Context): Binary 
   return <any>result;
 }
 
-export function parseTemplate(state: ParserState, context: Context, func?: AccessScope | AccessMember | AccessKeyed): LiteralTemplate {
+function parseTemplate(state: ParserState, context: Context, func?: AccessScopeExpression | AccessMemberExpression | AccessKeyedExpression): TemplateExpression {
   const cooked: Array<string> = [<string>state.tokenValue];
   const raw: string[] = context & Context.Tagged ? [state.tokenRaw] : undefined as any;
   expect(state, Token.TemplateContinuation);
@@ -346,7 +345,7 @@ export function parseTemplate(state: ParserState, context: Context, func?: Acces
     raw.push(state.tokenRaw);
   }
   nextToken(state);
-  return new LiteralTemplate(cooked, expressions, raw, func);
+  return new TemplateExpression(cooked, expressions, raw, func);
 }
 
 function nextToken(state: ParserState): void {
@@ -564,7 +563,7 @@ function unescape(code: number): number {
 
 // Context flags
 
-export const enum Context {
+const enum Context {
   // The order of Context.This, Context.Scope, Context.Member and Context.Keyed affects their behavior due to the bitwise left shift
   // used in parseLeftHandSideExpresion
   This          = 0b00000000000000000000010000000000, //1 << 10;
@@ -579,7 +578,7 @@ export const enum Context {
 
 // Tokens
 
-export const enum Token {
+const enum Token {
   /* Performing a bitwise and (&) with this value (63) will return only the
    * token bit, which corresponds to the index of the token's value in the
    * TokenValues array */
@@ -666,7 +665,7 @@ export const enum Token {
   /** '!' */         Exclamation             = 0b00000000010000000000000000101001, //41 | UnaryOp
 }
 
-export const enum Char {
+const enum Char {
   Null           = 0x00,
   Tab            = 0x09,
   LineFeed       = 0x0A,

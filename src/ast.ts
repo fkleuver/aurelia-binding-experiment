@@ -1,28 +1,34 @@
 import { getContextFor } from './scope';
 import { connectBindingToSignal } from './signals';
 import { Scope, OverrideContext, LookupFunctions, EvaluateResult, BindingFlags, Binding, AssignResult } from './types';
-import { parseBindingBehavior, parseValueConverter, parseVariadicArguments, parseExpression, parseConditional, parseLeftHandSide, ParserState } from './parser';
 
-export type Expression = Chain | BindingBehavior | ValueConverter | Assign | Conditional |
-  AccessThis | AccessScope | AccessMember | AccessKeyed |
-  CallScope | CallMember | CallFunction | Binary | Unary |
-  LiteralPrimitive | LiteralString | LiteralTemplate | LiteralArray | LiteralObject;
+export type CallExpression = CallFunctionExpression | CallMemberExpression | CallScopeExpression;
+export type AccessExpression = AccessThisExpression | AccessScopeExpression | AccessMemberExpression | AccessKeyedExpression;
+export type LiteralExpression = ArrayLiteralExpression | ObjectLiteralExpression | PrimitiveLiteralExpression | TemplateExpression;
 
-export class Chain {
+export type PrimaryExpression = AccessExpression | LiteralExpression | UnaryExpression;
+export type LeftHandSideExpression = PrimaryExpression | CallExpression;
+export type VariadicExpression = BindingBehaviorExpression | ValueConverterExpression;
+export type StandardNonAssignmentExpression = LeftHandSideExpression | AssignmentExpression | BinaryExpression | TernaryExpression;
+export type StandardExpression = StandardNonAssignmentExpression | AssignmentExpression;
+export type AureliaExpression = StandardExpression | VariadicExpression;
+export type Expression = AureliaExpression | ExpressionChain;
+
+export class ExpressionChain {
   public isChain: true;
   public isAssignable: false;
   public bind: undefined;
   public unbind: undefined;
 
-  public expressions: Array<ReturnType<typeof parseBindingBehavior>>;
-  constructor(expressions: Array<ReturnType<typeof parseBindingBehavior>>) {
+  public expressions: Array<AureliaExpression>;
+  constructor(expressions: Array<AureliaExpression>) {
     this.isChain = true;
     this.isAssignable = false;
 
     this.expressions = expressions;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): EvaluateResult<ReturnType<typeof parseBindingBehavior>> {
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): EvaluateResult<AureliaExpression> {
     let result;
     const expressions = this.expressions;
     let last;
@@ -47,14 +53,14 @@ export class Chain {
   }
 }
 
-export class BindingBehavior {
+export class BindingBehaviorExpression {
   public isChain: false;
   public isAssignable: false;
 
-  public expression: ReturnType<typeof parseBindingBehavior>;
+  public expression: AureliaExpression;
   public name: string;
-  public args: ReturnType<typeof parseVariadicArguments>;
-  constructor(expression: ReturnType<typeof parseBindingBehavior>, name: string, args: ReturnType<typeof parseVariadicArguments>) {
+  public args: Array<StandardExpression>;
+  constructor(expression: AureliaExpression, name: string, args: Array<StandardExpression>) {
     this.isChain = false;
     this.isAssignable = false;
 
@@ -63,7 +69,7 @@ export class BindingBehavior {
     this.args = args;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): EvaluateResult<ReturnType<typeof parseBindingBehavior>> {
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): EvaluateResult<AureliaExpression> {
     return this.expression.evaluate(scope, lookupFunctions, flags);
   }
 
@@ -105,17 +111,17 @@ export class BindingBehavior {
   }
 }
 
-export class ValueConverter {
+export class ValueConverterExpression {
   public isChain: false;
   public isAssignable: false;
   public bind: undefined;
   public unbind: undefined;
 
-  public expression: ReturnType<typeof parseValueConverter>;
+  public expression: StandardExpression | ValueConverterExpression;
   public name: string;
-  public args: ReturnType<typeof parseVariadicArguments>;
+  public args: Array<StandardExpression>;
   public allArgs: any[];
-  constructor(expression: ReturnType<typeof parseValueConverter>, name: string, args: ReturnType<typeof parseVariadicArguments>) {
+  constructor(expression: StandardExpression | ValueConverterExpression, name: string, args: Array<StandardExpression>) {
     this.isChain = false;
     this.isAssignable = false;
 
@@ -125,7 +131,7 @@ export class ValueConverter {
     this.allArgs = [expression].concat(args);
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): EvaluateResult<ReturnType<typeof parseValueConverter>> {
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): EvaluateResult<StandardExpression | ValueConverterExpression> {
     const converter = lookupFunctions.valueConverters(this.name);
     if (!converter) {
       throw new Error(`No ValueConverter named "${this.name}" was found!`);
@@ -176,16 +182,16 @@ export class ValueConverter {
   }
 }
 
-export class Assign {
+export class AssignmentExpression {
   public isChain: false;
   public isAssignable: true;
   public bind: undefined;
   public unbind: undefined;
   public expression: undefined;
 
-  public target: ReturnType<typeof parseExpression>;
-  public value: ReturnType<typeof parseConditional>;
-  constructor(target: ReturnType<typeof parseExpression>, value: ReturnType<typeof parseConditional>) {
+  public target: StandardExpression;
+  public value: StandardNonAssignmentExpression;
+  constructor(target: StandardExpression, value: StandardNonAssignmentExpression) {
     this.isChain = false;
     this.isAssignable = true;
 
@@ -193,7 +199,7 @@ export class Assign {
     this.value = value;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): AssignResult<ReturnType<typeof parseExpression>> {
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): AssignResult<StandardExpression> {
     return this.target.assign(scope, this.value.evaluate(scope, lookupFunctions, flags), lookupFunctions, flags);
   }
 
@@ -210,17 +216,17 @@ export class Assign {
   }
 }
 
-export class Conditional {
+export class TernaryExpression {
   public isChain: false;
   public isAssignable: false;
   public bind: undefined;
   public unbind: undefined;
   public expression: undefined;
 
-  public condition: ReturnType<typeof parseConditional>;
-  public yes: ReturnType<typeof parseExpression>;
-  public no: ReturnType<typeof parseExpression>;
-  constructor(condition: ReturnType<typeof parseConditional>, yes: ReturnType<typeof parseExpression>, no: ReturnType<typeof parseExpression>) {
+  public condition: StandardNonAssignmentExpression;
+  public yes: StandardExpression;
+  public no: StandardExpression;
+  constructor(condition: StandardNonAssignmentExpression, yes: StandardExpression, no: StandardExpression) {
     this.isChain = false;
     this.isAssignable = false;
 
@@ -229,7 +235,7 @@ export class Conditional {
     this.no = no;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): EvaluateResult<ReturnType<typeof parseExpression>> {
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): EvaluateResult<StandardExpression> {
     return !!this.condition.evaluate(scope, lookupFunctions, flags)
       ? this.yes.evaluate(scope, lookupFunctions, flags)
       : this.no.evaluate(scope, lookupFunctions, flags);
@@ -253,7 +259,7 @@ export class Conditional {
   }
 }
 
-export class AccessThis {
+export class AccessThisExpression {
   public isChain: false;
   public isAssignable: false;
   public bind: undefined;
@@ -287,7 +293,7 @@ export class AccessThis {
   }
 }
 
-export class AccessScope {
+export class AccessScopeExpression {
   public isChain: false;
   public isAssignable: true;
   public bind: undefined;
@@ -324,7 +330,7 @@ export class AccessScope {
   }
 }
 
-export class AccessMember {
+export class AccessMemberExpression {
   public isChain: false;
   public isAssignable: true;
   public bind: undefined;
@@ -332,8 +338,8 @@ export class AccessMember {
   public expression: undefined;
 
   public name: string;
-  public object: ReturnType<typeof parseExpression>;
-  constructor(object: ReturnType<typeof parseExpression>, name: string) {
+  public object: StandardExpression;
+  constructor(object: StandardExpression, name: string) {
     this.isChain = false;
     this.isAssignable = true;
 
@@ -371,16 +377,16 @@ export class AccessMember {
   }
 }
 
-export class AccessKeyed {
+export class AccessKeyedExpression {
   public isChain: false;
   public isAssignable: true;
   public bind: undefined;
   public unbind: undefined;
   public expression: undefined;
 
-  public object: ReturnType<typeof parseExpression>;
-  public key: ReturnType<typeof parseExpression>;
-  constructor(object: ReturnType<typeof parseExpression>, key: ReturnType<typeof parseExpression>) {
+  public object: StandardExpression;
+  public key: StandardExpression;
+  constructor(object: StandardExpression, key: StandardExpression) {
     this.isChain = false;
     this.isAssignable = true;
 
@@ -419,7 +425,7 @@ export class AccessKeyed {
   }
 }
 
-export class CallScope {
+export class CallScopeExpression {
   public isChain: false;
   public isAssignable: false;
   public bind: undefined;
@@ -427,9 +433,9 @@ export class CallScope {
   public expression: undefined;
 
   public name: string;
-  public args: Array<ReturnType<typeof parseExpression>>;
+  public args: Array<StandardExpression>;
   public ancestor: number;
-  constructor(name: string, args: Array<ReturnType<typeof parseExpression>>, ancestor: number) {
+  constructor(name: string, args: Array<StandardExpression>, ancestor: number) {
     this.isChain = false;
     this.isAssignable = false;
 
@@ -465,7 +471,7 @@ export class CallScope {
   }
 }
 
-export class CallMember {
+export class CallMemberExpression {
   public isChain: false;
   public isAssignable: false;
   public bind: undefined;
@@ -473,9 +479,9 @@ export class CallMember {
   public expression: undefined;
 
   public name: string;
-  public args: Array<ReturnType<typeof parseExpression>>;
-  public object: ReturnType<typeof parseExpression>;
-  constructor(object: ReturnType<typeof parseExpression>, name: string, args: Array<ReturnType<typeof parseExpression>>) {
+  public args: Array<StandardExpression>;
+  public object: StandardExpression;
+  constructor(object: StandardExpression, name: string, args: Array<StandardExpression>) {
     this.isChain = false;
     this.isAssignable = false;
 
@@ -515,16 +521,16 @@ export class CallMember {
   }
 }
 
-export class CallFunction {
+export class CallFunctionExpression {
   public isChain: false;
   public isAssignable: false;
   public bind: undefined;
   public unbind: undefined;
   public expression: undefined;
 
-  public args: Array<ReturnType<typeof parseExpression>>;
-  public func: ReturnType<typeof parseExpression>;
-  constructor(func: ReturnType<typeof parseExpression>, args: Array<ReturnType<typeof parseExpression>>) {
+  public args: Array<StandardExpression>;
+  public func: StandardExpression;
+  constructor(func: StandardExpression, args: Array<StandardExpression>) {
     this.isChain = false;
     this.isAssignable = false;
 
@@ -564,7 +570,7 @@ export class CallFunction {
   }
 }
 
-export class Binary {
+export class BinaryExpression {
   public isChain: false;
   public isAssignable: false;
   public bind: undefined;
@@ -572,9 +578,9 @@ export class Binary {
   public expression: undefined;
 
   public operation: string;
-  public left: ReturnType<typeof parseLeftHandSide>;
-  public right: ReturnType<typeof parseExpression>;
-  constructor(operation: string, left: ReturnType<typeof parseLeftHandSide>, right: ReturnType<typeof parseExpression>) {
+  public left: LeftHandSideExpression | BinaryExpression;
+  public right: StandardExpression;
+  constructor(operation: string, left: LeftHandSideExpression | BinaryExpression, right: StandardExpression) {
     this.isChain = false;
     this.isAssignable = false;
 
@@ -648,8 +654,6 @@ export class Binary {
         return left <= right;
       case '>=':
         return left >= right;
-      case '^':
-        return left ^ right;
       default:
     }
 
@@ -674,15 +678,15 @@ export class Binary {
   }
 }
 
-export class Unary {
+export class UnaryExpression {
   public isChain: false;
   public isAssignable: false;
   public bind: undefined;
   public unbind: undefined;
 
-  public expression:  ReturnType<typeof parseLeftHandSide>;
-  public operation: 'void' | 'typeof' | '!';
-  constructor(operation: 'void' | 'typeof' | '!', expression:  ReturnType<typeof parseLeftHandSide>) {
+  public expression:  LeftHandSideExpression;
+  public operation: 'void' | 'typeof' | '!' | '-';
+  constructor(operation: 'void' | 'typeof' | '!' | '-', expression:  LeftHandSideExpression) {
     this.isChain = false;
     this.isAssignable = false;
 
@@ -690,10 +694,13 @@ export class Unary {
     this.expression = expression;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): EvaluateResult<ReturnType<typeof parseLeftHandSide>> {
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): EvaluateResult<LeftHandSideExpression> {
     switch (this.operation) {
       case '!':
         return !this.expression.evaluate(scope, lookupFunctions, flags);
+      case '-':
+        const val = this.expression.evaluate(scope, lookupFunctions, flags);
+        return val === null || val === undefined ? null : 0 - val;
       case 'typeof':
         return typeof this.expression.evaluate(scope, lookupFunctions, flags);
       case 'void':
@@ -717,22 +724,22 @@ export class Unary {
   }
 }
 
-export class LiteralPrimitive {
+export class PrimitiveLiteralExpression {
   public isChain: false;
   public isAssignable: false;
   public bind: undefined;
   public unbind: undefined;
   public expression: undefined;
 
-  public value: number | boolean | null | undefined;
-  constructor(value: number | boolean | null | undefined) {
+  public value: string | number | boolean | null | undefined;
+  constructor(value: string | number | boolean | null | undefined) {
     this.isChain = false;
     this.isAssignable = false;
 
     this.value = value;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): number | boolean | null | undefined {
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): string | number | boolean | null | undefined {
     return this.value;
   }
 
@@ -747,49 +754,19 @@ export class LiteralPrimitive {
   }
 }
 
-export class LiteralString {
+export class TemplateExpression {
   public isChain: false;
   public isAssignable: false;
   public bind: undefined;
   public unbind: undefined;
   public expression: undefined;
 
-  public value: string;
-  constructor(value: string) {
-    this.isChain = false;
-    this.isAssignable = false;
-
-    this.value = value;
-  }
-
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): string {
-    return this.value;
-  }
-
-  public accept(visitor: any): any {
-    return visitor.visitLiteralString(this);
-  }
-
-  public connect(binding: Binding, scope: Scope, flags: BindingFlags): void {}
-
-  public assign(scope: Scope, value: any, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
-    throw new Error(`Binding expression "${this}" cannot be assigned to.`);
-  }
-}
-
-export class LiteralTemplate {
-  public isChain: false;
-  public isAssignable: false;
-  public bind: undefined;
-  public unbind: undefined;
-  public expression: undefined;
-
-  public expressions: Array<ReturnType<typeof parseExpression>>;
-  public func?: ReturnType<typeof parseExpression>;
+  public expressions: Array<StandardExpression>;
+  public func?: StandardExpression;
   public cooked: Array<string> & { raw?: Array<string> };
   public length: number;
   public tagged: boolean;
-  constructor(cooked: Array<string>, expressions?: Array<ReturnType<typeof parseExpression>>, raw?: Array<string>, func?: ReturnType<typeof parseExpression>) {
+  constructor(cooked: Array<string>, expressions?: Array<StandardExpression>, raw?: Array<string>, func?: StandardExpression) {
     this.isChain = false;
     this.isAssignable = false;
 
@@ -840,22 +817,22 @@ export class LiteralTemplate {
   }
 }
 
-export class LiteralArray {
+export class ArrayLiteralExpression {
   public isChain: false;
   public isAssignable: false;
   public bind: undefined;
   public unbind: undefined;
   public expression: undefined;
 
-  public elements: Array<ReturnType<typeof parseExpression>>;
-  constructor(elements: Array<ReturnType<typeof parseExpression>>) {
+  public elements: Array<StandardExpression>;
+  constructor(elements: Array<StandardExpression>) {
     this.isChain = false;
     this.isAssignable = false;
 
     this.elements = elements;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): Array<EvaluateResult<ReturnType<typeof parseExpression>>> {
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): Array<EvaluateResult<StandardExpression>> {
     const elements = this.elements;
     const result = [];
 
@@ -882,7 +859,7 @@ export class LiteralArray {
   }
 }
 
-export class LiteralObject {
+export class ObjectLiteralExpression {
   public isChain: false;
   public isAssignable: false;
   public bind: undefined;
@@ -890,8 +867,8 @@ export class LiteralObject {
   public expression: undefined;
 
   public keys: Array<string | number>;
-  public values: Array<ReturnType<typeof parseExpression>>;
-  constructor(keys: Array<string | number>, values: Array<ReturnType<typeof parseExpression>>) {
+  public values: Array<StandardExpression>;
+  constructor(keys: Array<string | number>, values: Array<StandardExpression>) {
     this.isChain = false;
     this.isAssignable = false;
 
@@ -899,7 +876,7 @@ export class LiteralObject {
     this.values = values;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): { [key: string]: EvaluateResult<ReturnType<typeof parseExpression>> } {
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): { [key: string]: EvaluateResult<StandardExpression> } {
     const instance: any = {};
     const keys = this.keys;
     const values = this.values;
@@ -928,7 +905,7 @@ export class LiteralObject {
 }
 
 /// Evaluate the [list] in context of the [scope].
-function evalList(scope: Scope, list: any, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
+function evalList(scope: Scope, list: Array<StandardExpression>, lookupFunctions: LookupFunctions, flags: BindingFlags): any[] {
   const length = list.length;
   const result = [];
   for (let i = 0; i < length; i++) {
@@ -963,7 +940,7 @@ function autoConvertAdd(a: any, b: any): any {
   return 0;
 }
 
-function getFunction(obj: any, name: string, mustExist: any): any {
+function getFunction(obj: any, name: string, mustExist: number | boolean): Function | null {
   const func = obj === null || obj === undefined ? null : obj[name];
   if (typeof func === 'function') {
     return func;
