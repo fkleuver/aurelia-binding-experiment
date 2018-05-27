@@ -202,52 +202,49 @@ describe('Parser', () => {
     });
 
     describe('Binary operator precedence', () => {
-      const x = [0, 1, 2, 3, 4, 5, 6, 7].map(i => new AccessScope(`x${i}`, 0));
+      const x = [0, 1, 2, 3, 4, 5, 6].map(i => new AccessScope(`x${i}`, 0));
       const b = (l: any, op: any, r: any) => new Binary(op, l, r);
       const prec1 = ['||'];
       const prec2 = ['&&'];
-      const prec3 = ['^'];
-      const prec4 = ['==', '!=', '===', '!=='];
-      const prec5 = ['<', '>', '<=', '>=', 'in', 'instanceof'];
-      const prec6 = ['+', '-'];
-      const prec7 = ['*', '%', '/'];
+      const prec3 = ['==', '!=', '===', '!=='];
+      const prec4 = ['<', '>', '<=', '>=', 'in', 'instanceof'];
+      const prec5 = ['+', '-'];
+      const prec6 = ['*', '%', '/'];
       for (const _1 of prec1) {
         for (const _2 of prec2) {
           for (const _3 of prec3) {
             for (const _4 of prec4) {
               for (const _5 of prec5) {
                 for (const _6 of prec6) {
-                  for (const _7 of prec7) {
-                    const tests = [
-                      {
-                        // natural ascending precedence
-                        expr:       `x0 ${_1}    x1 ${_2}    x2 ${_3}    x3 ${_4}    x4 ${_5}    x5 ${_6}    x6 ${_7}  x7`,
-                        expected: b(x[0], _1, b(x[1], _2, b(x[2], _3, b(x[3], _4, b(x[4], _5, b(x[5], _6, b(x[6], _7, x[7])))))))
-                      },
-                      {
-                        // forced descending precedence
-                        expr:             `((((((x0 ${_1}  x1) ${_2}  x2) ${_3}  x3) ${_4}  x4) ${_5}  x5) ${_6}  x6) ${_7}  x7`,
-                        expected: b(b(b(b(b(b(b(x[0], _1, x[1]), _2, x[2]), _3, x[3]), _4, x[4]), _5, x[5]), _6, x[6]), _7, x[7])
-                      },
-                      {
-                        // natural descending precedence
-                        expr:                   `x7 ${_7}  x6  ${_6}  x5  ${_5}  x4  ${_4}  x3  ${_3}  x2  ${_2}  x1  ${_1}  x0`,
-                        expected: b(b(b(b(b(b(b(x[7], _7, x[6]), _6, x[5]), _5, x[4]), _4, x[3]), _3, x[2]), _2, x[1]), _1, x[0])
-                      },
-                      {
-                        // forced ascending precedence
-                        expr:       `x7 ${_7}   (x6 ${_6}   (x5 ${_5}   (x4 ${_4}   (x3 ${_3}   (x2 ${_2}   (x1 ${_1}  x0))))))`,
-                        expected: b(x[7], _7, b(x[6], _6, b(x[5], _5, b(x[4], _4, b(x[3], _3, b(x[2], _2, b(x[1], _1, x[0])))))))
-                      }
-                    ];
-
-                    for (const { expr, expected } of tests) {
-                      it(expr, () => {
-                        const actual = parser.parse(expr);
-                        expect(actual.toString()).to.equal(expected.toString());
-                        verifyEqual(actual, expected);
-                      });
+                  const tests = [
+                    {
+                      // natural ascending precedence
+                      expr:       `x0 ${_1}    x1 ${_2}    x2 ${_3}    x3 ${_4}    x4 ${_5}    x5 ${_6}    x6`,
+                      expected: b(x[0], _1, b(x[1], _2, b(x[2], _3, b(x[3], _4, b(x[4], _5, b(x[5], _6, x[6]))))))
+                    },
+                    {
+                      // forced descending precedence
+                      expr:             `(((((x0 ${_1}  x1) ${_2}  x2) ${_3}  x3) ${_4}  x4) ${_5}  x5) ${_6}  x6`,
+                      expected: b(b(b(b(b(b(x[0], _1, x[1]), _2, x[2]), _3, x[3]), _4, x[4]), _5, x[5]), _6, x[6])
+                    },
+                    {
+                      // natural descending precedence
+                      expr:                   `x6  ${_6}  x5  ${_5}  x4  ${_4}  x3  ${_3}  x2  ${_2}  x1  ${_1}  x0`,
+                      expected: b(b(b(b(b(b(x[6], _6, x[5]), _5, x[4]), _4, x[3]), _3, x[2]), _2, x[1]), _1, x[0])
+                    },
+                    {
+                      // forced ascending precedence
+                      expr:       `x6 ${_6}   (x5 ${_5}   (x4 ${_4}   (x3 ${_3}   (x2 ${_2}   (x1 ${_1}  x0)))))`,
+                      expected: b(x[6], _6, b(x[5], _5, b(x[4], _4, b(x[3], _3, b(x[2], _2, b(x[1], _1, x[0]))))))
                     }
+                  ];
+
+                  for (const { expr, expected } of tests) {
+                    it(expr, () => {
+                      const actual = parser.parse(expr);
+                      expect(actual.toString()).to.equal(expected.toString());
+                      verifyEqual(actual, expected);
+                    });
                   }
                 }
               }

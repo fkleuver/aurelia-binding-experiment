@@ -91,7 +91,7 @@ export function parseExpression(state: ParserState): Assign | ReturnType<typeof 
   let exprStart = state.index;
   let result: ReturnType<typeof parseExpression> = parseConditional(state);
 
-  while (state.currentToken === Token.Eq) {
+  while (state.currentToken === Token.Equals) {
     if (!result.isAssignable) {
       error(state, `Expression ${state.input.slice(exprStart, state.startIndex)} is not assignable`);
     }
@@ -138,7 +138,7 @@ export function parseLeftHandSideExpression(state: ParserState, context: Context
   case Token.Minus:
     nextToken(state);
     return new Binary('-', new LiteralPrimitive(0), parseLeftHandSideExpression(state, 0));
-  case Token.Bang:
+  case Token.Exclamation:
     nextToken(state);
     return new PrefixNot('!', parseLeftHandSideExpression(state, 0));
   case Token.TypeofKeyword:
@@ -151,8 +151,8 @@ export function parseLeftHandSideExpression(state: ParserState, context: Context
       do {
         nextToken(state);
         context++; // ancestor
-        if (optional(state, Token.Period)) {
-          if (state.currentToken === <any>Token.Period) {
+        if (optional(state, Token.Dot)) {
+          if (state.currentToken === <any>Token.Dot) {
             error(state);
           }
           continue;
@@ -179,30 +179,30 @@ export function parseLeftHandSideExpression(state: ParserState, context: Context
     result = new AccessThis(0);
     context = (context & Context.ShorthandProp) | Context.This;
     break;
-  case Token.LParen: // parenthesized expression
+  case Token.OpenParen: // parenthesized expression
     nextToken(state);
     result = parseExpression(state);
-    expect(state, Token.RParen);
+    expect(state, Token.CloseParen);
     break;
-  case Token.LBracket: // literal array
+  case Token.OpenBracket: // literal array
     {
       nextToken(state);
       const elements = [];
-      if (state.currentToken !== <any>Token.RBracket) {
+      if (state.currentToken !== <any>Token.CloseBracket) {
         do {
           elements.push(parseExpression(state));
         } while (optional(state, Token.Comma));
       }
-      expect(state, Token.RBracket);
+      expect(state, Token.CloseBracket);
       result = new LiteralArray(elements);
       break;
     }
-  case Token.LBrace: // object
+  case Token.OpenBrace: // object
     {
       const keys = [];
       const values = [];
       nextToken(state);
-      while (state.currentToken !== <any>Token.RBrace) {
+      while (state.currentToken !== <any>Token.CloseBrace) {
         if (state.currentToken & Token.IdentifierOrKeyword) {
           const { currentChar, index } = state;
           const currentToken: Token = state.currentToken;
@@ -224,11 +224,11 @@ export function parseLeftHandSideExpression(state: ParserState, context: Context
         } else {
           error(state);
         }
-        if (state.currentToken !== <any>Token.RBrace) {
+        if (state.currentToken !== <any>Token.CloseBrace) {
           expect(state, Token.Comma);
         }
       }
-      expect(state, Token.RBrace);
+      expect(state, Token.CloseBrace);
       result = new LiteralObject(keys, values);
       break;
     }
@@ -272,7 +272,7 @@ export function parseLeftHandSideExpression(state: ParserState, context: Context
   let name = state.tokenValue;
   while (state.currentToken & Token.MemberOrCallExpression) {
     switch (state.currentToken) {
-    case Token.Period:
+    case Token.Dot:
       nextToken(state);
       if (!(state.currentToken & Token.IdentifierOrKeyword)) {
         error(state);
@@ -281,7 +281,7 @@ export function parseLeftHandSideExpression(state: ParserState, context: Context
       nextToken(state);
       // Change $This to $Scope, change $Scope to $Member, keep $Member as-is, change $Keyed to $Member, disregard other flags
       context = ((context & (Context.This | Context.Scope)) << 1) | (context & Context.Member) | ((context & Context.Keyed) >> 1);
-      if (state.currentToken === <any>Token.LParen) {
+      if (state.currentToken === <any>Token.OpenParen) {
         continue;
       }
       if (context & Context.Scope) {
@@ -290,22 +290,22 @@ export function parseLeftHandSideExpression(state: ParserState, context: Context
         result = new AccessMember(result, <string>name);
       }
       continue;
-    case Token.LBracket:
+    case Token.OpenBracket:
       nextToken(state);
       context = Context.Keyed;
       result = new AccessKeyed(result, parseExpression(state));
-      expect(state, Token.RBracket);
+      expect(state, Token.CloseBracket);
       break;
-    case Token.LParen:
+    case Token.OpenParen:
       nextToken(state);
       const args = [];
-      while (state.currentToken !== <any>Token.RParen) {
+      while (state.currentToken !== <any>Token.CloseParen) {
         args.push(parseExpression(state));
         if (!optional(state, Token.Comma)) {
           break;
         }
       }
-      expect(state, Token.RParen);
+      expect(state, Token.CloseParen);
       if (context & Context.Scope) {
         result = new CallScope(<string>name, args, (<any>result).ancestor);
       } else if (context & Context.Member) {
@@ -585,88 +585,87 @@ export const enum Token {
   /* Performing a bitwise and (&) with this value (63) will return only the
    * token bit, which corresponds to the index of the token's value in the
    * TokenValues array */
-  TokenMask                             = 0b00000000000000000000000000111111, //(1 << 6) - 1,
+  TokenMask                                  = 0b00000000000000000000000000111111, //(1 << 6) - 1,
 
   /* Shifting 6 bits to the left gives us a step size of 64 in a range of
    * 64 (1 << 6) to 448 (7 << 6) for our precedence bit
    * This is the lowest value which does not overlap with the token bits 0-38. */
-  PrecShift                             = 0b00000000000000000000000000000110, //6,
+  PrecShift                                  = 0b00000000000000000000000000000110, //6,
 
   /* Performing a bitwise and (&) with this value will return only the
    * precedence bit, which is used to determine the parsing order of binary
    * expressions */
-  Precedence                            = 0b00000000000000000000000111000000, //7 << PrecShift,
+  Precedence                                 = 0b00000000000000000000000111000000, //7 << PrecShift,
 
   // The tokens must start at 1 << 11 to avoid conflict with Precedence (1 << 10 === 16 << 6)
   // and can go up to 1 << 30 (1 << 31 rolls over to negative)
-  ExpressionTerminal                    = 0b00000000000000000000100000000000, //1 << 11,
+  ExpressionTerminal                         = 0b00000000000000000000100000000000, //1 << 11,
   /** ')' | '}' | ']' */
-  ClosingToken                          = 0b00000000000000000001000000000000, //1 << 12,
+  ClosingToken                               = 0b00000000000000000001000000000000, //1 << 12,
   /** '(' | '{' | '[' */
-  OpeningToken                          = 0b00000000000000000010000000000000, //1 << 13,
+  OpeningToken                               = 0b00000000000000000010000000000000, //1 << 13,
   /** EOF | '(' | '}' | ')' | ',' | '[' | '&' | '|' */
-  AccessScopeTerminal                   = 0b00000000000000000100000000000000, //1 << 14,
-  Keyword                               = 0b00000000000000001000000000000000, //1 << 15,
-  EOF                                   = 0b00000000000000010100100000000000, //1 << 16 | AccessScopeTerminal | ExpressionTerminal,
-  Identifier                            = 0b00000000000000100000000000000000, //1 << 17,
-  IdentifierOrKeyword                   = 0b00000000000000101000000000000000, //Identifier | Keyword,
-  Literal                               = 0b00000000000001000000000000000000, //1 << 18,
-  NumericLiteral                        = 0b00000000000011000000000000000000, //1 << 19 | Literal,
-  StringLiteral                         = 0b00000000000101000000000000000000, //1 << 20 | Literal,
-  BinaryOp                              = 0b00000000001000000000000000000000, //1 << 21,
+  AccessScopeTerminal                        = 0b00000000000000000100000000000000, //1 << 14,
+  Keyword                                    = 0b00000000000000001000000000000000, //1 << 15,
+  EOF                                        = 0b00000000000000010100100000000000, //1 << 16 | AccessScopeTerminal | ExpressionTerminal,
+  Identifier                                 = 0b00000000000000100000000000000000, //1 << 17,
+  IdentifierOrKeyword                        = 0b00000000000000101000000000000000, //Identifier | Keyword,
+  Literal                                    = 0b00000000000001000000000000000000, //1 << 18,
+  NumericLiteral                             = 0b00000000000011000000000000000000, //1 << 19 | Literal,
+  StringLiteral                              = 0b00000000000101000000000000000000, //1 << 20 | Literal,
+  BinaryOp                                   = 0b00000000001000000000000000000000, //1 << 21,
   /** '+' | '-' | '!' */
-  UnaryOp                               = 0b00000000010000000000000000000000, //1 << 22,
+  UnaryOp                                    = 0b00000000010000000000000000000000, //1 << 22,
   /** '.' | '[' */
-  MemberExpression                      = 0b00000000100000000000000000000000, //1 << 23,
+  MemberExpression                           = 0b00000000100000000000000000000000, //1 << 23,
   /** '.' | '[' | '(' */
-  MemberOrCallExpression                = 0b00000001000000000000000000000000, //1 << 24,
-  TemplateTail                          = 0b00000011000000000000000000000000, //1 << 25 | MemberOrCallExpression,
-  TemplateContinuation                  = 0b00000101000000000000000000000000, //1 << 26 | MemberOrCallExpression,
+  MemberOrCallExpression                     = 0b00000001000000000000000000000000, //1 << 24,
+  TemplateTail                               = 0b00000011000000000000000000000000, //1 << 25 | MemberOrCallExpression,
+  TemplateContinuation                       = 0b00000101000000000000000000000000, //1 << 26 | MemberOrCallExpression,
 
-  /** false */      FalseKeyword        = 0b00000000000001001000000000000000, //0 | Keyword | Literal,
-  /** true */       TrueKeyword         = 0b00000000000001001000000000000001, //1 | Keyword | Literal,
-  /** null */       NullKeyword         = 0b00000000000001001000000000000010, //2 | Keyword | Literal,
-  /** undefined */  UndefinedKeyword    = 0b00000000000001001000000000000011, //3 | Keyword | Literal,
-  /** '$this' */    ThisScope           = 0b00000000000000101000000000000100, //4 | IdentifierOrKeyword,
-  /** '$parent' */  ParentScope         = 0b00000000000000101000000000000101, //5 | IdentifierOrKeyword,
+  /** false */      FalseKeyword             = 0b00000000000001001000000000000000, //0 | Keyword | Literal,
+  /** true */       TrueKeyword              = 0b00000000000001001000000000000001, //1 | Keyword | Literal,
+  /** null */       NullKeyword              = 0b00000000000001001000000000000010, //2 | Keyword | Literal,
+  /** undefined */  UndefinedKeyword         = 0b00000000000001001000000000000011, //3 | Keyword | Literal,
+  /** '$this' */    ThisScope                = 0b00000000000000101000000000000100, //4 | IdentifierOrKeyword,
+  /** '$parent' */  ParentScope              = 0b00000000000000101000000000000101, //5 | IdentifierOrKeyword,
 
-  /** '(' */  LParen                    = 0b00000001000000000110000000000110, // 6 | OpeningToken | AccessScopeTerminal | MemberOrCallExpression,
-  /** '{' */  LBrace                    = 0b00000000000000000010000000000111, // 7 | OpeningToken,
-  /** '.' */  Period                    = 0b00000001100000000000000000001000, // 8 | MemberExpression | MemberOrCallExpression,
-  /** '}' */  RBrace                    = 0b00000000000000000101100000001001, // 9 | AccessScopeTerminal | ClosingToken | ExpressionTerminal,
-  /** ')' */  RParen                    = 0b00000000000000000101100000001010, //10 | AccessScopeTerminal | ClosingToken | ExpressionTerminal,
-  /** ';' */  Semicolon                 = 0b00000000000000000000100000001011, //11 | ExpressionTerminal,
-  /** ',' */  Comma                     = 0b00000000000000000100000000001100, //12 | AccessScopeTerminal,
-  /** '[' */  LBracket                  = 0b00000001100000000110000000001101, //13 | OpeningToken | AccessScopeTerminal | MemberExpression | MemberOrCallExpression,
-  /** ']' */  RBracket                  = 0b00000000000000000001100000001110, //14 | ClosingToken | ExpressionTerminal,
-  /** ':' */  Colon                     = 0b00000000000000000100000000001111, //15 | AccessScopeTerminal,
-  /** '?' */  Question                  = 0b00000000000000000000000000010000, //16,
+  /** '(' */  OpenParen                      = 0b00000001000000000110000000000110, // 6 | OpeningToken | AccessScopeTerminal | MemberOrCallExpression,
+  /** '{' */  OpenBrace                      = 0b00000000000000000010000000000111, // 7 | OpeningToken,
+  /** '.' */  Dot                            = 0b00000001100000000000000000001000, // 8 | MemberExpression | MemberOrCallExpression,
+  /** '}' */  CloseBrace                     = 0b00000000000000000101100000001001, // 9 | AccessScopeTerminal | ClosingToken | ExpressionTerminal,
+  /** ')' */  CloseParen                     = 0b00000000000000000101100000001010, //10 | AccessScopeTerminal | ClosingToken | ExpressionTerminal,
+  /** ';' */  Semicolon                      = 0b00000000000000000000100000001011, //11 | ExpressionTerminal,
+  /** ',' */  Comma                          = 0b00000000000000000100000000001100, //12 | AccessScopeTerminal,
+  /** '[' */  OpenBracket                    = 0b00000001100000000110000000001101, //13 | OpeningToken | AccessScopeTerminal | MemberExpression | MemberOrCallExpression,
+  /** ']' */  CloseBracket                   = 0b00000000000000000001100000001110, //14 | ClosingToken | ExpressionTerminal,
+  /** ':' */  Colon                          = 0b00000000000000000100000000001111, //15 | AccessScopeTerminal,
+  /** '?' */  Question                       = 0b00000000000000000000000000010000, //16,
 
   // Operator precedence: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Operator_Precedence#Table
-  /** '&' */         Ampersand          = 0b00000000000000000100000000010011, //19 | AccessScopeTerminal,
-  /** '|' */         Bar                = 0b00000000000000000100000000010100, //20 | AccessScopeTerminal,
-  /** '||' */        BarBar             = 0b00000000001000000000000001010101, //21 /* 5*/ |  1 << PrecShift | BinaryOp,
-  /** '&&' */        AmpersandAmpersand = 0b00000000001000000000000010010110, //22 /* 6*/ |  2 << PrecShift | BinaryOp,
-  /** '^' */         Caret              = 0b00000000001000000000000011010111, //23 /* 8*/ |  3 << PrecShift | BinaryOp,
-  /** '==' */        EqEq               = 0b00000000001000000000000100011000, //24 /*10*/ |  4 << PrecShift | BinaryOp,
-  /** '!=' */        BangEq             = 0b00000000001000000000000100011001, //25 /*10*/ |  4 << PrecShift | BinaryOp,
-  /** '===' */       EqEqEq             = 0b00000000001000000000000100011010, //26 /*10*/ |  4 << PrecShift | BinaryOp,
-  /** '!== '*/       BangEqEq           = 0b00000000001000000000000100011011, //27 /*10*/ |  4 << PrecShift | BinaryOp,
-  /** '<' */         Lt                 = 0b00000000001000000000000101011100, //28 /*11*/ |  5 << PrecShift | BinaryOp,
-  /** '>' */         Gt                 = 0b00000000001000000000000101011101, //29 /*11*/ |  5 << PrecShift | BinaryOp,
-  /** '<=' */        LtEq               = 0b00000000001000000000000101011110, //30 /*11*/ |  5 << PrecShift | BinaryOp,
-  /** '>=' */        GtEq               = 0b00000000001000000000000101011111, //31 /*11*/ |  5 << PrecShift | BinaryOp,
-  /** 'in' */        InKeyword          = 0b00000000001000001000000101100000, //32 /*11*/ |  5 << PrecShift | BinaryOp | Keyword,
-  /** 'instanceof' */InstanceOfKeyword  = 0b00000000001000001000000101100001, //33 /*11*/ |  5 << PrecShift | BinaryOp | Keyword,
-  /** '+' */         Plus               = 0b00000000011000000000000110100010, //34 /*13*/ |  6 << PrecShift | BinaryOp | UnaryOp,
-  /** '-' */         Minus              = 0b00000000011000000000000110100011, //35 /*13*/ |  6 << PrecShift | BinaryOp | UnaryOp,
-  /** 'typeof' */    TypeofKeyword      = 0b00000000010000001000000000100100, //36 /*16*/ | UnaryOp | Keyword,
-  /** 'void' */      VoidKeyword        = 0b00000000010000001000000000100101, //37 /*16*/ | UnaryOp | Keyword,
-  /** '*' */         Star               = 0b00000000001000000000000111100110, //38 /*14*/ |  7 << PrecShift | BinaryOp,
-  /** '%' */         Percent            = 0b00000000001000000000000111100111, //39 /*14*/ |  7 << PrecShift | BinaryOp,
-  /** '/' */         Slash              = 0b00000000001000000000000111101000, //40 /*14*/ |  7 << PrecShift | BinaryOp,
-  /** '=' */         Eq                 = 0b00000000000000000000000000101001, //41,
-  /** '!' */         Bang               = 0b00000000010000000000000000101010, //42 | UnaryOp
+  /** '&' */         Ampersand               = 0b00000000000000000100000000010011, //19 | AccessScopeTerminal,
+  /** '|' */         Bar                     = 0b00000000000000000100000000010100, //20 | AccessScopeTerminal,
+  /** '||' */        BarBar                  = 0b00000000001000000000000001010101, //21 /* 5*/ |  1 << PrecShift | BinaryOp,
+  /** '&&' */        AmpersandAmpersand      = 0b00000000001000000000000010010110, //22 /* 6*/ |  2 << PrecShift | BinaryOp,
+  /** '==' */        EqualsEquals            = 0b00000000001000000000000011010111, //23 /*10*/ |  3 << PrecShift | BinaryOp,
+  /** '!=' */        ExclamationEquals       = 0b00000000001000000000000011011000, //24 /*10*/ |  3 << PrecShift | BinaryOp,
+  /** '===' */       EqualsEqualsEquals      = 0b00000000001000000000000011011001, //25 /*10*/ |  3 << PrecShift | BinaryOp,
+  /** '!== '*/       ExclamationEqualsEquals = 0b00000000001000000000000011011010, //26 /*10*/ |  3 << PrecShift | BinaryOp,
+  /** '<' */         LessThan                = 0b00000000001000000000000100011011, //27 /*11*/ |  4 << PrecShift | BinaryOp,
+  /** '>' */         GreaterThan             = 0b00000000001000000000000100011100, //28 /*11*/ |  4 << PrecShift | BinaryOp,
+  /** '<=' */        LessThanEquals          = 0b00000000001000000000000100011101, //29 /*11*/ |  4 << PrecShift | BinaryOp,
+  /** '>=' */        GreaterThanEquals       = 0b00000000001000000000000100011110, //30 /*11*/ |  4 << PrecShift | BinaryOp,
+  /** 'in' */        InKeyword               = 0b00000000001000001000000100011111, //31 /*11*/ |  4 << PrecShift | BinaryOp | Keyword,
+  /** 'instanceof' */InstanceOfKeyword       = 0b00000000001000001000000100100000, //32 /*11*/ |  4 << PrecShift | BinaryOp | Keyword,
+  /** '+' */         Plus                    = 0b00000000011000000000000101100001, //33 /*13*/ |  5 << PrecShift | BinaryOp | UnaryOp,
+  /** '-' */         Minus                   = 0b00000000011000000000000101100010, //34 /*13*/ |  5 << PrecShift | BinaryOp | UnaryOp,
+  /** 'typeof' */    TypeofKeyword           = 0b00000000010000001000000000100011, //35 /*16*/ | UnaryOp | Keyword,
+  /** 'void' */      VoidKeyword             = 0b00000000010000001000000000100100, //36 /*16*/ | UnaryOp | Keyword,
+  /** '*' */         Asterisk                = 0b00000000001000000000000110100101, //37 /*14*/ |  6 << PrecShift | BinaryOp,
+  /** '%' */         Percent                 = 0b00000000001000000000000110100110, //38 /*14*/ |  6 << PrecShift | BinaryOp,
+  /** '/' */         Slash                   = 0b00000000001000000000000110100111, //39 /*14*/ |  6 << PrecShift | BinaryOp,
+  /** '=' */         Equals                  = 0b00000000000000000000000000101000, //40,
+  /** '!' */         Exclamation             = 0b00000000010000000000000000101001, //41 | UnaryOp
 }
 
 const KeywordLookup: {
@@ -695,7 +694,7 @@ const TokenValues = [
 
   '(', '{', '.', '}', ')', ';', ',', '[', ']', ':', '?', '\'', '"',
 
-  '&', '|', '||', '&&', '^', '==', '!=', '===', '!==', '<', '>',
+  '&', '|', '||', '&&', '==', '!=', '===', '!==', '<', '>',
   '<=', '>=', 'in', 'instanceof', '+', '-', 'typeof', 'void', '*', '%', '/', '=', '!'
 ];
 
@@ -782,25 +781,25 @@ CharScanners[/*` 96*/0x60] = s => {
 // !, !=, !==
 CharScanners[/*! 33*/0x21] = s => {
   if (nextChar(s) !== /*=*/0x3D) {
-    return Token.Bang;
+    return Token.Exclamation;
   }
   if (nextChar(s) !== /*=*/0x3D) {
-    return Token.BangEq;
+    return Token.ExclamationEquals;
   }
   nextChar(s);
-  return Token.BangEqEq;
+  return Token.ExclamationEqualsEquals;
 };
 
 // =, ==, ===
 CharScanners[/*= 61*/0x3D] =  s => {
   if (nextChar(s) !== /*=*/0x3D) {
-    return Token.Eq;
+    return Token.Equals;
   }
   if (nextChar(s) !== /*=*/0x3D) {
-    return Token.EqEq;
+    return Token.EqualsEquals;
   }
   nextChar(s);
-  return Token.EqEqEq;
+  return Token.EqualsEqualsEquals;
 };
 
 // &, &&
@@ -826,31 +825,31 @@ CharScanners[/*. 46*/0x2E] = s => {
   if (nextChar(s) <= /*9*/0x39 && s.currentChar >= /*0*/0x30) {
     return scanNumber(s, true);
   }
-  return Token.Period;
+  return Token.Dot;
 };
 
 // <, <=
 CharScanners[/*< 60*/0x3C] =  s => {
   if (nextChar(s) !== /*=*/0x3D) {
-    return Token.Lt;
+    return Token.LessThan;
   }
   nextChar(s);
-  return Token.LtEq;
+  return Token.LessThanEquals;
 };
 
 // >, >=
 CharScanners[/*> 62*/0x3E] =  s => {
   if (nextChar(s) !== /*=*/0x3D) {
-    return Token.Gt;
+    return Token.GreaterThan;
   }
   nextChar(s);
-  return Token.GtEq;
+  return Token.GreaterThanEquals;
 };
 
 CharScanners[/*% 37*/0x25] = returnToken(Token.Percent);
-CharScanners[/*( 40*/0x28] = returnToken(Token.LParen);
-CharScanners[/*) 41*/0x29] = returnToken(Token.RParen);
-CharScanners[/** 42*/0x2A] = returnToken(Token.Star);
+CharScanners[/*( 40*/0x28] = returnToken(Token.OpenParen);
+CharScanners[/*) 41*/0x29] = returnToken(Token.CloseParen);
+CharScanners[/** 42*/0x2A] = returnToken(Token.Asterisk);
 CharScanners[/*+ 43*/0x2B] = returnToken(Token.Plus);
 CharScanners[/*, 44*/0x2C] = returnToken(Token.Comma);
 CharScanners[/*- 45*/0x2D] = returnToken(Token.Minus);
@@ -858,11 +857,10 @@ CharScanners[/*/ 47*/0x2F] = returnToken(Token.Slash);
 CharScanners[/*: 58*/0x3A] = returnToken(Token.Colon);
 CharScanners[/*; 59*/0x3B] = returnToken(Token.Semicolon);
 CharScanners[/*? 63*/0x3F] = returnToken(Token.Question);
-CharScanners[/*[ 91*/0x5B] = returnToken(Token.LBracket);
-CharScanners[/*] 93*/0x5D] = returnToken(Token.RBracket);
-CharScanners[/*^ 94*/0x5E] = returnToken(Token.Caret);
-CharScanners[/*{ 123*/0x7B] = returnToken(Token.LBrace);
-CharScanners[/*} 125*/0x7D] = returnToken(Token.RBrace);
+CharScanners[/*[ 91*/0x5B] = returnToken(Token.OpenBracket);
+CharScanners[/*] 93*/0x5D] = returnToken(Token.CloseBracket);
+CharScanners[/*{ 123*/0x7B] = returnToken(Token.OpenBrace);
+CharScanners[/*} 125*/0x7D] = returnToken(Token.CloseBrace);
 
 const enum IdentifierChar {
   start,
