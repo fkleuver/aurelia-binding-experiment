@@ -2,8 +2,8 @@ import {
   Chain, ValueConverter, Assign, Conditional,
   AccessThis, AccessScope, AccessMember, AccessKeyed,
   CallScope, CallFunction, CallMember,
-  PrefixNot, BindingBehavior, Binary,
-  LiteralPrimitive, LiteralArray, LiteralObject, LiteralString, LiteralTemplate, PrefixUnary, Expression
+  Unary, BindingBehavior, Binary,
+  LiteralPrimitive, LiteralArray, LiteralObject, LiteralString, LiteralTemplate, Expression
 } from './ast';
 
 export class Parser {
@@ -113,8 +113,8 @@ export function parseConditional(state: ParserState): Conditional | ReturnType<t
   return result;
 }
 
-export function parseBinary(state: ParserState, minPrecedence: number): Binary | ReturnType<typeof parseLeftHandSideExpression> {
-  let left = parseLeftHandSideExpression(state, 0);
+export function parseBinary(state: ParserState, minPrecedence: number): Binary | ReturnType<typeof parseLeftHandSide> {
+  let left = parseLeftHandSide(state, 0);
 
   while (state.currentToken & Token.BinaryOp) {
     const opToken = state.currentToken;
@@ -127,25 +127,23 @@ export function parseBinary(state: ParserState, minPrecedence: number): Binary |
   return left;
 }
 
-export function parseLeftHandSideExpression(state: ParserState, context: Context): Binary | PrefixNot | PrefixUnary | AccessThis | AccessScope | AccessMember | AccessKeyed | LiteralArray | LiteralObject | LiteralPrimitive | LiteralString | LiteralTemplate | CallFunction | CallMember | CallScope {
+export function parseLeftHandSide(state: ParserState, context: Context): Binary | Unary | AccessThis | AccessScope | AccessMember | AccessKeyed | LiteralArray | LiteralObject | LiteralPrimitive | LiteralString | LiteralTemplate | CallFunction | CallMember | CallScope {
   let result: ReturnType<typeof parseExpression> = undefined as any;
 
   // Unary + Primary expression
   primary: switch (state.currentToken) {
   case Token.Plus:
     nextToken(state);
-    return parseLeftHandSideExpression(state, 0);
+    return parseLeftHandSide(state, 0);
   case Token.Minus:
     nextToken(state);
-    return new Binary('-', new LiteralPrimitive(0), parseLeftHandSideExpression(state, 0));
+    return new Binary('-', new LiteralPrimitive(0), parseLeftHandSide(state, 0));
   case Token.Exclamation:
-    nextToken(state);
-    return new PrefixNot('!', parseLeftHandSideExpression(state, 0));
   case Token.TypeofKeyword:
   case Token.VoidKeyword:
     const op = TokenValues[state.currentToken & Token.TokenMask];
     nextToken(state);
-    return new PrefixUnary(<any>op, parseLeftHandSideExpression(state, 0));
+    return new Unary(<any>op, parseLeftHandSide(state, 0));
   case Token.ParentScope: // $parent
     {
       do {
@@ -214,7 +212,7 @@ export function parseLeftHandSideExpression(state: ParserState, context: Context
             state.currentChar = currentChar;
             state.currentToken = currentToken;
             state.index = index;
-            values.push(parseLeftHandSideExpression(state, Context.ShorthandProp));
+            values.push(parseLeftHandSide(state, Context.ShorthandProp));
           }
         } else if (state.currentToken & Token.Literal) {
           keys.push(state.tokenValue);
@@ -359,12 +357,12 @@ function nextToken(state: ParserState): void {
    * Additional characters can be added via addIdentifierStart / addIdentifierPart.
    */
   while (state.index < state.length) {
-    if (state.currentChar <= /*whitespace*/0x20) {
+    if (state.currentChar <= Char.Space) {
       nextChar(state);
       continue;
     }
     state.startIndex = state.index;
-    if (state.currentChar === /*$*/0x24 || (state.currentChar >= /*a*/0x61 && state.currentChar <= /*z*/0x7A)) {
+    if (state.currentChar === Char.Dollar || (state.currentChar >= Char.LowerA && state.currentChar <= Char.LowerZ)) {
       state.currentToken = scanIdentifier(state);
       return;
     }
@@ -397,38 +395,38 @@ function scanNumber(state: ParserState, isFloat: boolean): Token.NumericLiteral 
   if (isFloat) {
     state.tokenValue = 0;
   } else {
-    state.tokenValue = state.currentChar - /*0*/0x30;
-    while (nextChar(state) <= /*9*/0x39 && state.currentChar >= /*0*/0x30) {
-      state.tokenValue = state.tokenValue * 10 + state.currentChar  - /*0*/0x30;
+    state.tokenValue = state.currentChar - Char.Zero;
+    while (nextChar(state) <= Char.Nine && state.currentChar >= Char.Zero) {
+      state.tokenValue = state.tokenValue * 10 + state.currentChar  - Char.Zero;
     }
   }
 
-  if (isFloat || state.currentChar === /*.*/0x2E) {
+  if (isFloat || state.currentChar === Char.Dot) {
     // isFloat (coming from the period scanner) means the period was already skipped
     if (!isFloat) {
       nextChar(state);
     }
     const start = state.index;
-    let value = state.currentChar - /*0*/0x30;
-    while (nextChar(state) <= /*9*/0x39 && state.currentChar >= /*0*/0x30) {
-      value = value * 10 + state.currentChar  - /*0*/0x30;
+    let value = state.currentChar - Char.Zero;
+    while (nextChar(state) <= Char.Nine && state.currentChar >= Char.Zero) {
+      value = value * 10 + state.currentChar  - Char.Zero;
     }
     state.tokenValue = state.tokenValue + value / 10 ** (state.index - start);
   }
 
-  if (state.currentChar === /*e*/0x65 || state.currentChar === /*E*/0x45) {
+  if (state.currentChar === Char.LowerE || state.currentChar === Char.UpperE) {
     const start = state.index;
 
     nextChar(state);
-    if (state.currentChar === /*-*/<any>0x2D || state.currentChar === /*+*/<any>0x2B) {
+    if (state.currentChar === <any>Char.Minus || state.currentChar === <any>Char.Plus) {
       nextChar(state);
     }
 
-    if (!(state.currentChar >= /*0*/0x30 && state.currentChar <= /*9*/0x39)) {
+    if (!(state.currentChar >= Char.Zero && state.currentChar <= Char.Nine)) {
       state.index = start;
       error(state, 'Invalid exponent');
     }
-    while (nextChar(state) <= /*9*/0x39 && state.currentChar >= /*0*/0x30) { } // eslint-disable-line no-empty
+    while (nextChar(state) <= Char.Nine && state.currentChar >= Char.Zero) { } // eslint-disable-line no-empty
     state.tokenValue = parseFloat(state.input.slice(state.startIndex, state.index));
   }
 
@@ -444,12 +442,12 @@ function scanString(state: ParserState): Token.StringLiteral {
   let marker = state.index;
 
   while (state.currentChar !== quote) {
-    if (state.currentChar === /*\*/0x5C) {
+    if (state.currentChar === Char.Backslash) {
       buffer.push(state.input.slice(marker, state.index));
 
       nextChar(state);
 
-      if (state.currentChar === /*u*/<any>0x75) {
+      if (state.currentChar === <any>Char.LowerU) {
         nextChar(state);
 
         if (state.index + 4 < state.length) {
@@ -498,16 +496,16 @@ function scanTemplate(state: ParserState): Token.TemplateTail | Token.TemplateCo
   let tail = true;
   let result = '';
 
-  while (nextChar(state) !== /*`*/0x60) {
-    if (state.currentChar === /*$*/0x24) {
-      if ((state.index + 1) < state.length && state.input.charCodeAt(state.index + 1) === /*{*/0x7B) {
+  while (nextChar(state) !== Char.Backtick) {
+    if (state.currentChar === Char.Dollar) {
+      if ((state.index + 1) < state.length && state.input.charCodeAt(state.index + 1) === Char.OpenBrace) {
         state.index++;
         tail = false;
         break;
       } else {
         result += '$';
       }
-    } else if (state.currentChar === /*\*/0x5C) {
+    } else if (state.currentChar === Char.Backslash) {
       result += String.fromCharCode(unescape(nextChar(state)));
     } else {
       result += String.fromCharCode(state.currentChar);
@@ -555,11 +553,11 @@ function expect(state: ParserState, token: Token): void {
 // find out if the full list can be included without introducing a breaking change
 function unescape(code: number): number {
   switch (code) {
-  case /*f*/0x66: return /*[FF]*/0xC;
-  case /*n*/0x6E: return /*[LF]*/0xA;
-  case /*r*/0x72: return /*[CR]*/0xD;
-  case /*t*/0x74: return /*[TAB]*/0x9;
-  case /*v*/0x76: return /*[VTAB]*/0xB;
+  case Char.LowerF: return Char.FormFeed;
+  case Char.LowerN: return Char.LineFeed;
+  case Char.LowerR: return Char.CarriageReturn;
+  case Char.LowerT: return Char.Tab;
+  case Char.LowerV: return Char.VerticalTab;
   default: return code;
   }
 }
@@ -668,6 +666,110 @@ export const enum Token {
   /** '!' */         Exclamation             = 0b00000000010000000000000000101001, //41 | UnaryOp
 }
 
+export const enum Char {
+  Null           = 0x00,
+  Tab            = 0x09,
+  LineFeed       = 0x0A,
+  VerticalTab    = 0x0B,
+  FormFeed       = 0x0C,
+  CarriageReturn = 0x0D,
+  Space          = 0x20,
+  Exclamation    = 0x21,
+  DoubleQuote    = 0x22,
+  Dollar         = 0x24,
+  Percent        = 0x25,
+  Ampersand      = 0x26,
+  SingleQuote    = 0x27,
+  OpenParen      = 0x28,
+  CloseParen     = 0x29,
+  Asterisk       = 0x2A,
+  Plus           = 0x2B,
+  Comma          = 0x2C,
+  Minus          = 0x2D,
+  Dot            = 0x2E,
+  Slash          = 0x2F,
+  Backtick       = 0x60,
+  OpenBracket    = 0x5B,
+  Backslash      = 0x5C,
+  CloseBracket   = 0x5D,
+  Caret          = 0x5E,
+  Underscore     = 0x5F,
+  OpenBrace      = 0x7B,
+  Bar            = 0x7C,
+  CloseBrace     = 0x7D,
+  Colon          = 0x3A,
+  Semicolon      = 0x3B,
+  LessThan       = 0x3C,
+  Equals         = 0x3D,
+  GreaterThan    = 0x3E,
+  Question       = 0x3F,
+
+  Zero   = 0x30,
+  One    = 0x31,
+  Two    = 0x32,
+  Three  = 0x33,
+  Four   = 0x34,
+  Five   = 0x35,
+  Six    = 0x36,
+  Seven  = 0x37,
+  Eight  = 0x38,
+  Nine   = 0x39,
+
+  UpperA = 0x41,
+  UpperB = 0x42,
+  UpperC = 0x43,
+  UpperD = 0x44,
+  UpperE = 0x45,
+  UpperF = 0x46,
+  UpperG = 0x47,
+  UpperH = 0x48,
+  UpperI = 0x49,
+  UpperJ = 0x4A,
+  UpperK = 0x4B,
+  UpperL = 0x4C,
+  UpperM = 0x4D,
+  UpperN = 0x4E,
+  UpperO = 0x4F,
+  UpperP = 0x50,
+  UpperQ = 0x51,
+  UpperR = 0x52,
+  UpperS = 0x53,
+  UpperT = 0x54,
+  UpperU = 0x55,
+  UpperV = 0x56,
+  UpperW = 0x57,
+  UpperX = 0x58,
+  UpperY = 0x59,
+  UpperZ = 0x5A,
+
+  LowerA  = 0x61,
+  LowerB  = 0x62,
+  LowerC  = 0x63,
+  LowerD  = 0x64,
+  LowerE  = 0x65,
+  LowerF  = 0x66,
+  LowerG  = 0x67,
+  LowerH  = 0x68,
+  LowerI  = 0x69,
+  LowerJ  = 0x6A,
+  LowerK  = 0x6B,
+  LowerL  = 0x6C,
+  LowerM  = 0x6D,
+  LowerN  = 0x6E,
+  LowerO  = 0x6F,
+  LowerP  = 0x70,
+  LowerQ  = 0x71,
+  LowerR  = 0x72,
+  LowerS  = 0x73,
+  LowerT  = 0x74,
+  LowerU  = 0x75,
+  LowerV  = 0x76,
+  LowerW  = 0x77,
+  LowerX  = 0x78,
+  LowerY  = 0x79,
+  LowerZ  = 0x7A
+}
+
 const KeywordLookup: {
   [key: string]: Token.TrueKeyword | Token.NullKeyword | Token.FalseKeyword | Token.UndefinedKeyword | Token.ThisScope | Token.ParentScope | Token.InKeyword | Token.InstanceOfKeyword | Token.TypeofKeyword | Token.VoidKeyword;
 } = Object.create(null);
@@ -770,20 +872,20 @@ decompress(CharScanners, null, codes.Skip, s => {
 decompress(CharScanners, null, codes.IdStart, scanIdentifier);
 decompress(CharScanners, null, codes.Digit, s => scanNumber(s, false));
 
-CharScanners[/*" 34*/0x22] =
-CharScanners[/*' 39*/0x27] = s => {
+CharScanners[Char.DoubleQuote] =
+CharScanners[Char.SingleQuote] = s => {
   return scanString(s);
 };
-CharScanners[/*` 96*/0x60] = s => {
+CharScanners[Char.Backtick] = s => {
   return scanTemplate(s);
 };
 
 // !, !=, !==
-CharScanners[/*! 33*/0x21] = s => {
-  if (nextChar(s) !== /*=*/0x3D) {
+CharScanners[Char.Exclamation] = s => {
+  if (nextChar(s) !== Char.Equals) {
     return Token.Exclamation;
   }
-  if (nextChar(s) !== /*=*/0x3D) {
+  if (nextChar(s) !== Char.Equals) {
     return Token.ExclamationEquals;
   }
   nextChar(s);
@@ -791,11 +893,11 @@ CharScanners[/*! 33*/0x21] = s => {
 };
 
 // =, ==, ===
-CharScanners[/*= 61*/0x3D] =  s => {
-  if (nextChar(s) !== /*=*/0x3D) {
+CharScanners[Char.Equals] =  s => {
+  if (nextChar(s) !== Char.Equals) {
     return Token.Equals;
   }
-  if (nextChar(s) !== /*=*/0x3D) {
+  if (nextChar(s) !== Char.Equals) {
     return Token.EqualsEquals;
   }
   nextChar(s);
@@ -803,8 +905,8 @@ CharScanners[/*= 61*/0x3D] =  s => {
 };
 
 // &, &&
-CharScanners[/*& 38*/0x26] = s => {
-  if (nextChar(s) !== /*&*/0x26) {
+CharScanners[Char.Ampersand] = s => {
+  if (nextChar(s) !== Char.Ampersand) {
     return Token.Ampersand;
   }
   nextChar(s);
@@ -812,8 +914,8 @@ CharScanners[/*& 38*/0x26] = s => {
 };
 
 // |, ||
-CharScanners[/*| 124*/0x7C] = s => {
-  if (nextChar(s) !== /*|*/0x7C) {
+CharScanners[Char.Bar] = s => {
+  if (nextChar(s) !== Char.Bar) {
     return Token.Bar;
   }
   nextChar(s);
@@ -821,16 +923,16 @@ CharScanners[/*| 124*/0x7C] = s => {
 };
 
 // .
-CharScanners[/*. 46*/0x2E] = s => {
-  if (nextChar(s) <= /*9*/0x39 && s.currentChar >= /*0*/0x30) {
+CharScanners[Char.Dot] = s => {
+  if (nextChar(s) <= Char.Nine && s.currentChar >= Char.Zero) {
     return scanNumber(s, true);
   }
   return Token.Dot;
 };
 
 // <, <=
-CharScanners[/*< 60*/0x3C] =  s => {
-  if (nextChar(s) !== /*=*/0x3D) {
+CharScanners[Char.LessThan] =  s => {
+  if (nextChar(s) !== Char.Equals) {
     return Token.LessThan;
   }
   nextChar(s);
@@ -838,75 +940,26 @@ CharScanners[/*< 60*/0x3C] =  s => {
 };
 
 // >, >=
-CharScanners[/*> 62*/0x3E] =  s => {
-  if (nextChar(s) !== /*=*/0x3D) {
+CharScanners[Char.GreaterThan] =  s => {
+  if (nextChar(s) !== Char.Equals) {
     return Token.GreaterThan;
   }
   nextChar(s);
   return Token.GreaterThanEquals;
 };
 
-CharScanners[/*% 37*/0x25] = returnToken(Token.Percent);
-CharScanners[/*( 40*/0x28] = returnToken(Token.OpenParen);
-CharScanners[/*) 41*/0x29] = returnToken(Token.CloseParen);
-CharScanners[/** 42*/0x2A] = returnToken(Token.Asterisk);
-CharScanners[/*+ 43*/0x2B] = returnToken(Token.Plus);
-CharScanners[/*, 44*/0x2C] = returnToken(Token.Comma);
-CharScanners[/*- 45*/0x2D] = returnToken(Token.Minus);
-CharScanners[/*/ 47*/0x2F] = returnToken(Token.Slash);
-CharScanners[/*: 58*/0x3A] = returnToken(Token.Colon);
-CharScanners[/*; 59*/0x3B] = returnToken(Token.Semicolon);
-CharScanners[/*? 63*/0x3F] = returnToken(Token.Question);
-CharScanners[/*[ 91*/0x5B] = returnToken(Token.OpenBracket);
-CharScanners[/*] 93*/0x5D] = returnToken(Token.CloseBracket);
-CharScanners[/*{ 123*/0x7B] = returnToken(Token.OpenBrace);
-CharScanners[/*} 125*/0x7D] = returnToken(Token.CloseBrace);
-
-const enum IdentifierChar {
-  start,
-  part
-}
-
-function addIdPartOrStart(char: IdentifierChar, value: number | string | Array<number | string>): void {
-  switch (typeof value) {
-  case 'number':
-    if (char === IdentifierChar.start) {
-      // only set the function if it is an IdentifierStart and does not already have a function
-      if (CharScanners[<number>value].notMapped) {
-        CharScanners[<number>value] = scanIdentifier;
-      } else {
-        throw new Error(`IdentifierPart [${String.fromCharCode(<number>value)}] conflicts with an existing character mapping.`);
-      }
-    }
-    // an IdentifierStart is always also an IdentifierPart, so we'll set this value regardless
-    IdParts[<number>value] = 1;
-    AsciiIdParts.add(<number>value);
-    break;
-  case 'string': {
-    let len = (<string>value).length;
-    while (len--) addIdPartOrStart(char, (<string>value)[len].charCodeAt(0));
-    break;
-  }
-  case 'object': {
-    let len = (<Array<string | number>>value).length;
-    if (Array.isArray) {
-      while (len--) {
-        addIdPartOrStart(char, (<Array<string | number>>value)[len]);
-      }
-      break;
-    }
-  }
-  // falls through
-  default:
-    throw new Error(`${char} must be a string, number, or an array of either (actual: ${typeof value})`);
-  }
-}
-
-export const ParserConfig = {
-  addIdentifierPart: (value: number | string | Array<number | string>) => {
-    addIdPartOrStart(IdentifierChar.part, value);
-  },
-  addIdentifierStart: (value: number | string | Array<number | string>) => {
-    addIdPartOrStart(IdentifierChar.start, value);
-  }
-};
+CharScanners[Char.Percent]      = returnToken(Token.Percent);
+CharScanners[Char.OpenParen]    = returnToken(Token.OpenParen);
+CharScanners[Char.CloseParen]   = returnToken(Token.CloseParen);
+CharScanners[Char.Asterisk]     = returnToken(Token.Asterisk);
+CharScanners[Char.Plus]         = returnToken(Token.Plus);
+CharScanners[Char.Comma]        = returnToken(Token.Comma);
+CharScanners[Char.Minus]        = returnToken(Token.Minus);
+CharScanners[Char.Slash]        = returnToken(Token.Slash);
+CharScanners[Char.Colon]        = returnToken(Token.Colon);
+CharScanners[Char.Semicolon]    = returnToken(Token.Semicolon);
+CharScanners[Char.Question]     = returnToken(Token.Question);
+CharScanners[Char.OpenBracket]  = returnToken(Token.OpenBracket);
+CharScanners[Char.CloseBracket] = returnToken(Token.CloseBracket);
+CharScanners[Char.OpenBrace]    = returnToken(Token.OpenBrace);
+CharScanners[Char.CloseBrace]   = returnToken(Token.CloseBrace);

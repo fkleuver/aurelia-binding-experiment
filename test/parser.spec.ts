@@ -1,9 +1,9 @@
-import { Parser, ParserConfig } from '../src/parser';
+import { Parser } from '../src/parser';
 import { AccessKeyed, AccessMember, AccessScope, AccessThis,
   Assign, Binary, BindingBehavior, CallFunction,
   CallMember, CallScope, Conditional,
   LiteralArray, LiteralObject, LiteralPrimitive, LiteralString, LiteralTemplate,
-  PrefixNot, PrefixUnary, ValueConverter } from '../src/ast';
+  Unary, ValueConverter } from '../src/ast';
 import { latin1IdentifierStartChars, latin1IdentifierPartChars, otherBMPIdentifierPartChars } from './unicode';
 import { expect } from 'chai';
 
@@ -182,7 +182,7 @@ describe('Parser', () => {
         const nestedTests = [
           { expr: `${expr} ? a : b`, expected: paren ? new Conditional(expected, $a, $b) : new Conditional(expected.condition, expected.yes, new Conditional(<any>expected.no, $a, $b)) },
           { expr: `a[b] ? ${expr} : a=((b))`, expected: new Conditional(new AccessKeyed($a, $b), expected, new Assign($a, $b)) },
-          { expr: `a ? !b===!a : ${expr}`, expected: new Conditional($a, new Binary('===', new PrefixNot('!', $b), new PrefixNot('!', $a)), expected) }
+          { expr: `a ? !b===!a : ${expr}`, expected: new Conditional($a, new Binary('===', new Unary('!', $b), new Unary('!', $a)), expected) }
         ];
 
         for (const { expr: nExpr, expected: nExpected } of nestedTests) {
@@ -257,7 +257,7 @@ describe('Parser', () => {
     describe('Binary + Unary operator precedence', () => {
       const x = $x;
       const y = $y;
-      const u = (op: any, r: any) => op === '!' ? new PrefixNot(op, r) : new PrefixUnary(op, r);
+      const u = (op: any, r: any) => op === '!' ? new Unary(op, r) : new Unary(op, r);
       const b = (l: any, op: any, r: any) => new Binary(op, l, r);
 
       for (const _b of binaryOps) {
@@ -753,39 +753,6 @@ describe('Parser', () => {
 
     it('double dot (AccessThis)', () => {
       _verifyError('$parent..bar', `Unexpected token . at column 8`);
-    });
-  });
-
-  describe('addIdentifierPartStart', () => {
-    const asciiChars = ['~', '@', '#', '\\'];
-
-    beforeEach(() => {
-      parser = new Parser();
-    });
-
-    for (const asciiChar of asciiChars.slice(0, 1)) {
-      it(`addIdentifierStart works for ASCII character ${asciiChar}`, () => {
-        ParserConfig.addIdentifierStart(asciiChar);
-        verifyEqual(parser.parse(asciiChar), new AccessScope(asciiChar, 0));
-      });
-    }
-
-    for (const asciiChar of asciiChars.slice(2, 3)) {
-      it(`addIdentifierPart works for ASCII character ${asciiChar}`, () => {
-        ParserConfig.addIdentifierPart(asciiChar);
-        verifyEqual(parser.parse(`$${asciiChar}`), new AccessScope(`$${asciiChar}`, 0));
-      });
-    }
-
-    it('addIdentifierStart works for unicode characters', () => {
-      ParserConfig.addIdentifierStart('ಠ');
-      verifyEqual(parser.parse('ಠ_ಠ'), new AccessScope('ಠ_ಠ', 0));
-    });
-
-    it('addIdentifierPart works for unicode characters', () => {
-      ParserConfig.addIdentifierPart('漢');
-      verifyEqual(parser.parse(`$漢`), new AccessScope('$漢', 0));
-      verifyError(parser, '漢', `Unexpected character [漢]`);
     });
   });
 

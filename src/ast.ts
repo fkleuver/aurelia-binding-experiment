@@ -1,11 +1,11 @@
 import { getContextFor } from './scope';
 import { connectBindingToSignal } from './signals';
 import { Scope, OverrideContext, LookupFunctions, EvaluateResult, BindingFlags, Binding, AssignResult } from './types';
-import { parseBindingBehavior, parseValueConverter, parseVariadicArguments, parseExpression, parseConditional, parseLeftHandSideExpression, ParserState } from './parser';
+import { parseBindingBehavior, parseValueConverter, parseVariadicArguments, parseExpression, parseConditional, parseLeftHandSide, ParserState } from './parser';
 
 export type Expression = Chain | BindingBehavior | ValueConverter | Assign | Conditional |
   AccessThis | AccessScope | AccessMember | AccessKeyed |
-  CallScope | CallMember | CallFunction | Binary | PrefixNot | PrefixUnary |
+  CallScope | CallMember | CallFunction | Binary | Unary |
   LiteralPrimitive | LiteralString | LiteralTemplate | LiteralArray | LiteralObject;
 
 export class Chain {
@@ -572,9 +572,9 @@ export class Binary {
   public expression: undefined;
 
   public operation: string;
-  public left: ReturnType<typeof parseLeftHandSideExpression>;
+  public left: ReturnType<typeof parseLeftHandSide>;
   public right: ReturnType<typeof parseExpression>;
-  constructor(operation: string, left: ReturnType<typeof parseLeftHandSideExpression>, right: ReturnType<typeof parseExpression>) {
+  constructor(operation: string, left: ReturnType<typeof parseLeftHandSide>, right: ReturnType<typeof parseExpression>) {
     this.isChain = false;
     this.isAssignable = false;
 
@@ -674,15 +674,15 @@ export class Binary {
   }
 }
 
-export class PrefixNot {
+export class Unary {
   public isChain: false;
   public isAssignable: false;
   public bind: undefined;
   public unbind: undefined;
 
-  public expression: ReturnType<typeof parseLeftHandSideExpression>;
-  public operation: '!';
-  constructor(operation: '!', expression:  ReturnType<typeof parseLeftHandSideExpression>) {
+  public expression:  ReturnType<typeof parseLeftHandSide>;
+  public operation: 'void' | 'typeof' | '!';
+  constructor(operation: 'void' | 'typeof' | '!', expression:  ReturnType<typeof parseLeftHandSide>) {
     this.isChain = false;
     this.isAssignable = false;
 
@@ -690,41 +690,10 @@ export class PrefixNot {
     this.expression = expression;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): EvaluateResult<ReturnType<typeof parseLeftHandSideExpression>> {
-    return !this.expression.evaluate(scope, lookupFunctions, flags);
-  }
-
-  public accept(visitor: any): any {
-    return visitor.visitPrefix(this);
-  }
-
-  public connect(binding: Binding, scope: Scope, flags: BindingFlags): void {
-    this.expression.connect(binding, scope, flags);
-  }
-
-  public assign(scope: Scope, value: any, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
-    throw new Error(`Binding expression "${this}" cannot be assigned to.`);
-  }
-}
-
-export class PrefixUnary {
-  public isChain: false;
-  public isAssignable: false;
-  public bind: undefined;
-  public unbind: undefined;
-
-  public expression:  ReturnType<typeof parseLeftHandSideExpression>;
-  public operation: 'void' | 'typeof';
-  constructor(operation: 'void' | 'typeof', expression:  ReturnType<typeof parseLeftHandSideExpression>) {
-    this.isChain = false;
-    this.isAssignable = false;
-
-    this.operation = operation;
-    this.expression = expression;
-  }
-
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): EvaluateResult<ReturnType<typeof parseLeftHandSideExpression>> {
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): EvaluateResult<ReturnType<typeof parseLeftHandSide>> {
     switch (this.operation) {
+      case '!':
+        return !this.expression.evaluate(scope, lookupFunctions, flags);
       case 'typeof':
         return typeof this.expression.evaluate(scope, lookupFunctions, flags);
       case 'void':
