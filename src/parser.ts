@@ -16,7 +16,7 @@ export class Parser {
   public parse(input: string): Expression {
     input = input || '';
 
-    return this.cache[input] || (this.cache[input] = parseChain(new ParserState(input)));
+    return this.cache[input] || (this.cache[input] = parseChain(new ParserState(input), 0));
   }
 }
 
@@ -45,12 +45,12 @@ class ParserState {
   }
 }
 
-function parseChain(state: ParserState): Expression {
+function parseChain(state: ParserState, context: Context): Expression {
   nextToken(state);
   const expressions = [];
 
   while (!(state.currentToken & Token.ExpressionTerminal)) {
-    expressions.push(parseBindingBehavior(state));
+    expressions.push(parseBindingBehavior(state, context));
   }
   if (state.currentToken !== Token.EOF) {
     if (optional(state, Token.Semicolon)) {
@@ -63,34 +63,34 @@ function parseChain(state: ParserState): Expression {
   return (expressions.length === 1) ? expressions[0] : new ExpressionChain(expressions);
 }
 
-function parseBindingBehavior(state: ParserState): AureliaExpression {
-  let result: AureliaExpression = parseValueConverter(state);
+function parseBindingBehavior(state: ParserState, context: Context): AureliaExpression {
+  let result: AureliaExpression = parseValueConverter(state, context);
   while (optional(state, Token.Ampersand)) {
-    result = new BindingBehaviorExpression(result, <string>state.tokenValue, parseVariadicArguments(state));
+    result = new BindingBehaviorExpression(result, <string>state.tokenValue, parseVariadicArguments(state, context));
   }
   return result;
 }
 
-function parseValueConverter(state: ParserState): ValueConverterExpression | StandardExpression {
-  let result: ValueConverterExpression | StandardExpression = parseExpression(state);
+function parseValueConverter(state: ParserState, context: Context): ValueConverterExpression | StandardExpression {
+  let result: ValueConverterExpression | StandardExpression = parseExpression(state, context);
   while (optional(state, Token.Bar)) {
-    result = new ValueConverterExpression(result, <string>state.tokenValue, parseVariadicArguments(state));
+    result = new ValueConverterExpression(result, <string>state.tokenValue, parseVariadicArguments(state, context));
   }
   return result;
 }
 
-function parseVariadicArguments(state: ParserState): Array<StandardExpression> {
+function parseVariadicArguments(state: ParserState, context: Context): Array<StandardExpression> {
   nextToken(state);
   const result = [];
   while (optional(state, Token.Colon)) {
-    result.push(parseExpression(state));
+    result.push(parseExpression(state, context));
   }
   return result;
 }
 
-function parseExpression(state: ParserState): StandardExpression {
+function parseExpression(state: ParserState, context: Context): StandardExpression {
   let exprStart = state.index;
-  let result: StandardExpression = parseConditional(state);
+  let result: StandardExpression = parseConditional(state, context);
 
   while (state.currentToken === Token.Equals) {
     if (!result.isAssignable) {
@@ -98,23 +98,23 @@ function parseExpression(state: ParserState): StandardExpression {
     }
     nextToken(state);
     exprStart = state.index;
-    result = new AssignmentExpression(result, parseConditional(state));
+    result = new AssignmentExpression(result, parseConditional(state, context));
   }
   return result;
 }
 
-function parseConditional(state: ParserState): StandardExpression {
-  let result: StandardNonAssignmentExpression = parseBinary(state, 0);
+function parseConditional(state: ParserState, context: Context): StandardExpression {
+  let result: StandardNonAssignmentExpression = parseBinary(state, context, 0);
 
   if (optional(state, Token.Question)) {
-    const yes = parseExpression(state);
+    const yes = parseExpression(state, context);
     expect(state, Token.Colon);
-    result = new TernaryExpression(result, yes, parseExpression(state));
+    result = new TernaryExpression(result, yes, parseExpression(state, context));
   }
   return result;
 }
 
-function parseBinary(state: ParserState, minPrecedence: number): BinaryExpression | LeftHandSideExpression {
+function parseBinary(state: ParserState, context: Context, minPrecedence: number): BinaryExpression | LeftHandSideExpression {
   let left: BinaryExpression | LeftHandSideExpression = parseLeftHandSide(state, 0);
 
   while (state.currentToken & Token.BinaryOp) {
@@ -123,7 +123,7 @@ function parseBinary(state: ParserState, minPrecedence: number): BinaryExpressio
       break;
     }
     nextToken(state);
-    left = new BinaryExpression(<string>TokenValues[opToken & Token.TokenMask], left, parseBinary(state, opToken & Token.Precedence));
+    left = new BinaryExpression(<string>TokenValues[opToken & Token.TokenMask], left, parseBinary(state, context, opToken & Token.Precedence));
   }
   return left;
 }
@@ -178,7 +178,7 @@ function parseLeftHandSide(state: ParserState, context: Context): LeftHandSideEx
     break;
   case Token.OpenParen: // parenthesized expression
     nextToken(state);
-    result = parseExpression(state);
+    result = parseExpression(state, 0);
     expect(state, Token.CloseParen);
     break;
   case Token.OpenBracket: // literal array
@@ -187,7 +187,7 @@ function parseLeftHandSide(state: ParserState, context: Context): LeftHandSideEx
       const elements = [];
       if (state.currentToken !== <any>Token.CloseBracket) {
         do {
-          elements.push(parseExpression(state));
+          elements.push(parseExpression(state, 0));
         } while (optional(state, Token.Comma));
       }
       expect(state, Token.CloseBracket);
@@ -206,7 +206,7 @@ function parseLeftHandSide(state: ParserState, context: Context): LeftHandSideEx
           keys.push(state.tokenValue);
           nextToken(state);
           if (optional(state, Token.Colon)) {
-            values.push(parseExpression(state));
+            values.push(parseExpression(state, 0));
           } else {
             state.currentChar = currentChar;
             state.currentToken = currentToken;
@@ -217,7 +217,7 @@ function parseLeftHandSide(state: ParserState, context: Context): LeftHandSideEx
           keys.push(state.tokenValue);
           nextToken(state);
           expect(state, Token.Colon);
-          values.push(parseExpression(state));
+          values.push(parseExpression(state, 0));
         } else {
           error(state);
         }
@@ -290,14 +290,14 @@ function parseLeftHandSide(state: ParserState, context: Context): LeftHandSideEx
     case Token.OpenBracket:
       nextToken(state);
       context = Context.Keyed;
-      result = new AccessKeyedExpression(result, parseExpression(state));
+      result = new AccessKeyedExpression(result, parseExpression(state, 0));
       expect(state, Token.CloseBracket);
       break;
     case Token.OpenParen:
       nextToken(state);
       const args = [];
       while (state.currentToken !== <any>Token.CloseParen) {
-        args.push(parseExpression(state));
+        args.push(parseExpression(state, 0));
         if (!optional(state, Token.Comma)) {
           break;
         }
@@ -329,7 +329,7 @@ function parseTemplate(state: ParserState, context: Context, func?: AccessScopeE
   const cooked: Array<string> = [<string>state.tokenValue];
   const raw: string[] = context & Context.Tagged ? [state.tokenRaw] : undefined as any;
   expect(state, Token.TemplateContinuation);
-  const expressions = [parseExpression(state)];
+  const expressions = [parseExpression(state, 0)];
 
   while ((state.currentToken = scanTemplateTail(state)) !== Token.TemplateTail) {
     cooked.push(<string>state.tokenValue);
@@ -337,7 +337,7 @@ function parseTemplate(state: ParserState, context: Context, func?: AccessScopeE
       raw.push(state.tokenRaw);
     }
     expect(state, Token.TemplateContinuation);
-    expressions.push(parseExpression(state));
+    expressions.push(parseExpression(state, 0));
   }
 
   cooked.push(<string>state.tokenValue);
