@@ -1,22 +1,22 @@
 import {
-  ExpressionChain, ValueConverterExpression, AssignmentExpression, TernaryExpression,
+  ValueConverterExpression, AssignmentExpression, TernaryExpression,
   AccessThisExpression, AccessScopeExpression, AccessMemberExpression, AccessKeyedExpression,
   CallScopeExpression, CallFunctionExpression, CallMemberExpression,
   UnaryExpression, BindingBehaviorExpression, BinaryExpression,
   PrimitiveLiteralExpression, ArrayLiteralExpression, ObjectLiteralExpression, TemplateExpression,
-  AureliaExpression, LeftHandSideExpression, Expression, StandardExpression, StandardNonAssignmentExpression
+  AureliaExpression, LeftHandSideExpression, StandardExpression, StandardNonAssignmentExpression
 } from './ast';
 
 export class Parser {
-  private cache: { [key: string]: Expression };
+  private cache: { [key: string]: AureliaExpression };
   constructor() {
     this.cache = Object.create(null);
   }
 
-  public parse(input: string): Expression {
+  public parse(input: string): AureliaExpression {
     input = input || '';
 
-    return this.cache[input] || (this.cache[input] = parseChain(new ParserState(input), 0));
+    return this.cache[input] || (this.cache[input] = parseAureliaExpression(new ParserState(input), 0));
   }
 }
 
@@ -45,22 +45,16 @@ class ParserState {
   }
 }
 
-function parseChain(state: ParserState, context: Context): Expression {
+function parseAureliaExpression(state: ParserState, context: Context): AureliaExpression {
   nextToken(state);
-  const expressions = [];
-
-  while (!(state.currentToken & Token.ExpressionTerminal)) {
-    expressions.push(parseBindingBehavior(state, context));
+  if (state.currentToken & Token.ExpressionTerminal) {
+    error(state, 'Invalid start of expression');
   }
+  const expr = parseBindingBehavior(state, context);
   if (state.currentToken !== Token.EOF) {
-    if (optional(state, Token.Semicolon)) {
-      error(state, 'Multiple expressions are not allowed.');
-    }
-    if (state.currentToken & Token.ClosingToken) {
-      error(state, `Unconsumed token ${state.tokenRaw}`);
-    }
+    error(state, `Unconsumed token ${state.tokenRaw}`);
   }
-  return (expressions.length === 1) ? expressions[0] : new ExpressionChain(expressions);
+  return expr;
 }
 
 function parseBindingBehavior(state: ParserState, context: Context): AureliaExpression {
@@ -572,6 +566,7 @@ const enum Context {
   Keyed         = 0b00000000000000000010000000000000, //1 << 13;
   ShorthandProp = 0b00000000000000000100000000000000, //1 << 14;
   Tagged        = 0b00000000000000001000000000000000, //1 << 15;
+  Assignable    = 0b00000000000000010000000000000000, //1 << 16;
   // Performing a bitwise and (&) with this value (511) will return only the ancestor bit (is this limit high enough?)
   Ancestor      = 0b00000000000000000000000111111111 //(1 << 9) - 1;
 }
@@ -956,7 +951,6 @@ CharScanners[Char.Comma]        = returnToken(Token.Comma);
 CharScanners[Char.Minus]        = returnToken(Token.Minus);
 CharScanners[Char.Slash]        = returnToken(Token.Slash);
 CharScanners[Char.Colon]        = returnToken(Token.Colon);
-CharScanners[Char.Semicolon]    = returnToken(Token.Semicolon);
 CharScanners[Char.Question]     = returnToken(Token.Question);
 CharScanners[Char.OpenBracket]  = returnToken(Token.OpenBracket);
 CharScanners[Char.CloseBracket] = returnToken(Token.CloseBracket);
