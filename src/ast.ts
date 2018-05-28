@@ -1,6 +1,6 @@
 import { getContextFor } from './scope';
 import { connectBindingToSignal } from './signals';
-import { Scope, OverrideContext, LookupFunctions, EvaluateResult, BindingFlags, Binding, AssignResult } from './types';
+import { Scope, OverrideContext, LookupFunctions, BindingFlags, Binding } from './types';
 
 export type CallExpression = CallFunctionExpression | CallMemberExpression | CallScopeExpression;
 export type AccessExpression = AccessThisExpression | AccessScopeExpression | AccessMemberExpression | AccessKeyedExpression;
@@ -8,26 +8,26 @@ export type LiteralExpression = ArrayLiteralExpression | ObjectLiteralExpression
 
 export type PrimaryExpression = AccessExpression | LiteralExpression | UnaryExpression;
 export type LeftHandSideExpression = PrimaryExpression | CallExpression;
-export type VariadicExpression = BindingBehaviorExpression | ValueConverterExpression;
-export type StandardNonAssignmentExpression = LeftHandSideExpression | AssignmentExpression | BinaryExpression | TernaryExpression;
-export type StandardExpression = StandardNonAssignmentExpression | AssignmentExpression;
-export type AureliaExpression = StandardExpression | VariadicExpression;
+export type IsUnaryExpression = LeftHandSideExpression | UnaryExpression;
+export type IsBinaryExpression = IsUnaryExpression | BinaryExpression;
+export type IsConditionalExpression = IsBinaryExpression | ConditionalExpression;
+export type IsAssignmentExpression = IsConditionalExpression | AssignmentExpression;
+export type IsValueConverterExpression = IsAssignmentExpression | ValueConverterExpression;
+export type IsBindingBehaviorExpression = IsValueConverterExpression | BindingBehaviorExpression;
+export type AssignableExpression = AccessScopeExpression | AccessKeyedExpression | AccessMemberExpression;
 
 export class BindingBehaviorExpression {
-  public isAssignable: false;
 
-  public expression: AureliaExpression;
+  public expression: IsBindingBehaviorExpression;
   public name: string;
-  public args: Array<StandardExpression>;
-  constructor(expression: AureliaExpression, name: string, args: Array<StandardExpression>) {
-    this.isAssignable = false;
-
+  public args: Array<IsAssignmentExpression>;
+  constructor(expression: IsBindingBehaviorExpression, name: string, args: Array<IsAssignmentExpression>) {
     this.expression = expression;
     this.name = name;
     this.args = args;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): EvaluateResult<AureliaExpression> {
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
     return this.expression.evaluate(scope, lookupFunctions, flags);
   }
 
@@ -70,24 +70,21 @@ export class BindingBehaviorExpression {
 }
 
 export class ValueConverterExpression {
-  public isAssignable: false;
   public bind: undefined;
   public unbind: undefined;
 
-  public expression: StandardExpression | ValueConverterExpression;
+  public expression: IsValueConverterExpression;
   public name: string;
-  public args: Array<StandardExpression>;
+  public args: Array<IsAssignmentExpression>;
   public allArgs: any[];
-  constructor(expression: StandardExpression | ValueConverterExpression, name: string, args: Array<StandardExpression>) {
-    this.isAssignable = false;
-
+  constructor(expression: IsValueConverterExpression, name: string, args: Array<IsAssignmentExpression>) {
     this.expression = expression;
     this.name = name;
     this.args = args;
     this.allArgs = [expression].concat(args);
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): EvaluateResult<StandardExpression | ValueConverterExpression> {
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
     const converter = lookupFunctions.valueConverters(this.name);
     if (!converter) {
       throw new Error(`No ValueConverter named "${this.name}" was found!`);
@@ -139,21 +136,18 @@ export class ValueConverterExpression {
 }
 
 export class AssignmentExpression {
-  public isAssignable: true;
   public bind: undefined;
   public unbind: undefined;
   public expression: undefined;
 
-  public target: StandardExpression;
-  public value: StandardNonAssignmentExpression;
-  constructor(target: StandardExpression, value: StandardNonAssignmentExpression) {
-    this.isAssignable = true;
-
+  public target: AssignableExpression;
+  public value: IsAssignmentExpression;
+  constructor(target: AssignableExpression, value: IsAssignmentExpression) {
     this.target = target;
     this.value = value;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): AssignResult<StandardExpression> {
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
     return this.target.assign(scope, this.value.evaluate(scope, lookupFunctions, flags), lookupFunctions, flags);
   }
 
@@ -170,24 +164,21 @@ export class AssignmentExpression {
   }
 }
 
-export class TernaryExpression {
-  public isAssignable: false;
+export class ConditionalExpression {
   public bind: undefined;
   public unbind: undefined;
   public expression: undefined;
 
-  public condition: StandardNonAssignmentExpression;
-  public yes: StandardExpression;
-  public no: StandardExpression;
-  constructor(condition: StandardNonAssignmentExpression, yes: StandardExpression, no: StandardExpression) {
-    this.isAssignable = false;
-
+  public condition: IsBinaryExpression;
+  public yes: IsAssignmentExpression;
+  public no: IsAssignmentExpression;
+  constructor(condition: IsBinaryExpression, yes: IsAssignmentExpression, no: IsAssignmentExpression) {
     this.condition = condition;
     this.yes = yes;
     this.no = no;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): EvaluateResult<StandardExpression> {
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
     return !!this.condition.evaluate(scope, lookupFunctions, flags)
       ? this.yes.evaluate(scope, lookupFunctions, flags)
       : this.no.evaluate(scope, lookupFunctions, flags);
@@ -212,14 +203,12 @@ export class TernaryExpression {
 }
 
 export class AccessThisExpression {
-  public isAssignable: false;
   public bind: undefined;
   public unbind: undefined;
   public expression: undefined;
 
   public ancestor: number;
   constructor(ancestor: number) {
-    this.isAssignable = false;
     this.ancestor = ancestor;
   }
 
@@ -244,7 +233,6 @@ export class AccessThisExpression {
 }
 
 export class AccessScopeExpression {
-  public isAssignable: true;
   public bind: undefined;
   public unbind: undefined;
   public expression: undefined;
@@ -252,8 +240,6 @@ export class AccessScopeExpression {
   public name: string;
   public ancestor: number;
   constructor(name: string, ancestor: number) {
-    this.isAssignable = true;
-
     this.name = name;
     this.ancestor = ancestor;
   }
@@ -279,16 +265,13 @@ export class AccessScopeExpression {
 }
 
 export class AccessMemberExpression {
-  public isAssignable: true;
   public bind: undefined;
   public unbind: undefined;
   public expression: undefined;
 
   public name: string;
-  public object: StandardExpression;
-  constructor(object: StandardExpression, name: string) {
-    this.isAssignable = true;
-
+  public object: LeftHandSideExpression;
+  constructor(object: LeftHandSideExpression, name: string) {
     this.object = object;
     this.name = name;
   }
@@ -324,16 +307,13 @@ export class AccessMemberExpression {
 }
 
 export class AccessKeyedExpression {
-  public isAssignable: true;
   public bind: undefined;
   public unbind: undefined;
   public expression: undefined;
 
-  public object: StandardExpression;
-  public key: StandardExpression;
-  constructor(object: StandardExpression, key: StandardExpression) {
-    this.isAssignable = true;
-
+  public object: LeftHandSideExpression;
+  public key: IsAssignmentExpression;
+  constructor(object: LeftHandSideExpression, key: IsAssignmentExpression) {
     this.object = object;
     this.key = key;
   }
@@ -370,17 +350,14 @@ export class AccessKeyedExpression {
 }
 
 export class CallScopeExpression {
-  public isAssignable: false;
   public bind: undefined;
   public unbind: undefined;
   public expression: undefined;
 
   public name: string;
-  public args: Array<StandardExpression>;
+  public args: Array<IsAssignmentExpression>;
   public ancestor: number;
-  constructor(name: string, args: Array<StandardExpression>, ancestor: number) {
-    this.isAssignable = false;
-
+  constructor(name: string, args: Array<IsAssignmentExpression>, ancestor: number) {
     this.name = name;
     this.args = args;
     this.ancestor = ancestor;
@@ -414,17 +391,14 @@ export class CallScopeExpression {
 }
 
 export class CallMemberExpression {
-  public isAssignable: false;
   public bind: undefined;
   public unbind: undefined;
   public expression: undefined;
 
   public name: string;
-  public args: Array<StandardExpression>;
-  public object: StandardExpression;
-  constructor(object: StandardExpression, name: string, args: Array<StandardExpression>) {
-    this.isAssignable = false;
-
+  public args: Array<IsAssignmentExpression>;
+  public object: LeftHandSideExpression;
+  constructor(object: LeftHandSideExpression, name: string, args: Array<IsAssignmentExpression>) {
     this.object = object;
     this.name = name;
     this.args = args;
@@ -462,16 +436,13 @@ export class CallMemberExpression {
 }
 
 export class CallFunctionExpression {
-  public isAssignable: false;
   public bind: undefined;
   public unbind: undefined;
   public expression: undefined;
 
-  public args: Array<StandardExpression>;
-  public func: StandardExpression;
-  constructor(func: StandardExpression, args: Array<StandardExpression>) {
-    this.isAssignable = false;
-
+  public args: Array<IsAssignmentExpression>;
+  public func: LeftHandSideExpression;
+  constructor(func: LeftHandSideExpression, args: Array<IsAssignmentExpression>) {
     this.func = func;
     this.args = args;
   }
@@ -509,17 +480,14 @@ export class CallFunctionExpression {
 }
 
 export class BinaryExpression {
-  public isAssignable: false;
   public bind: undefined;
   public unbind: undefined;
   public expression: undefined;
 
   public operation: string;
-  public left: LeftHandSideExpression | BinaryExpression;
-  public right: StandardExpression;
-  constructor(operation: string, left: LeftHandSideExpression | BinaryExpression, right: StandardExpression) {
-    this.isAssignable = false;
-
+  public left: IsBinaryExpression;
+  public right: IsBinaryExpression;
+  constructor(operation: string, left: IsBinaryExpression, right: IsBinaryExpression) {
     this.operation = operation;
     this.left = left;
     this.right = right;
@@ -615,20 +583,17 @@ export class BinaryExpression {
 }
 
 export class UnaryExpression {
-  public isAssignable: false;
   public bind: undefined;
   public unbind: undefined;
 
   public expression:  LeftHandSideExpression;
   public operation: 'void' | 'typeof' | '!' | '-';
-  constructor(operation: 'void' | 'typeof' | '!' | '-', expression:  LeftHandSideExpression) {
-    this.isAssignable = false;
-
+  constructor(operation: 'void' | 'typeof' | '!' | '-', expression: LeftHandSideExpression) {
     this.operation = operation;
     this.expression = expression;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): EvaluateResult<LeftHandSideExpression> {
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
     switch (this.operation) {
       case '!':
         return !this.expression.evaluate(scope, lookupFunctions, flags);
@@ -659,15 +624,12 @@ export class UnaryExpression {
 }
 
 export class PrimitiveLiteralExpression {
-  public isAssignable: false;
   public bind: undefined;
   public unbind: undefined;
   public expression: undefined;
 
   public value: string | number | boolean | null | undefined;
   constructor(value: string | number | boolean | null | undefined) {
-    this.isAssignable = false;
-
     this.value = value;
   }
 
@@ -687,19 +649,16 @@ export class PrimitiveLiteralExpression {
 }
 
 export class TemplateExpression {
-  public isAssignable: false;
   public bind: undefined;
   public unbind: undefined;
   public expression: undefined;
 
-  public expressions: Array<StandardExpression>;
-  public func?: StandardExpression;
+  public expressions: Array<IsAssignmentExpression>;
+  public func?: LeftHandSideExpression;
   public cooked: Array<string> & { raw?: Array<string> };
   public length: number;
   public tagged: boolean;
-  constructor(cooked: Array<string>, expressions?: Array<StandardExpression>, raw?: Array<string>, func?: StandardExpression) {
-    this.isAssignable = false;
-
+  constructor(cooked: Array<string>, expressions?: Array<IsAssignmentExpression>, raw?: Array<string>, func?: LeftHandSideExpression) {
     this.cooked = cooked;
     this.expressions = expressions || [];
     this.length = this.expressions.length;
@@ -748,19 +707,16 @@ export class TemplateExpression {
 }
 
 export class ArrayLiteralExpression {
-  public isAssignable: false;
   public bind: undefined;
   public unbind: undefined;
   public expression: undefined;
 
-  public elements: Array<StandardExpression>;
-  constructor(elements: Array<StandardExpression>) {
-    this.isAssignable = false;
-
+  public elements: Array<IsAssignmentExpression>;
+  constructor(elements: Array<IsAssignmentExpression>) {
     this.elements = elements;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): Array<EvaluateResult<StandardExpression>> {
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): any[] {
     const elements = this.elements;
     const result = [];
 
@@ -788,21 +744,18 @@ export class ArrayLiteralExpression {
 }
 
 export class ObjectLiteralExpression {
-  public isAssignable: false;
   public bind: undefined;
   public unbind: undefined;
   public expression: undefined;
 
   public keys: Array<string | number>;
-  public values: Array<StandardExpression>;
-  constructor(keys: Array<string | number>, values: Array<StandardExpression>) {
-    this.isAssignable = false;
-
+  public values: Array<IsAssignmentExpression>;
+  constructor(keys: Array<string | number>, values: Array<IsAssignmentExpression>) {
     this.keys = keys;
     this.values = values;
   }
 
-  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): { [key: string]: EvaluateResult<StandardExpression> } {
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): { [key: string]: any } {
     const instance: any = {};
     const keys = this.keys;
     const values = this.values;
@@ -831,7 +784,7 @@ export class ObjectLiteralExpression {
 }
 
 /// Evaluate the [list] in context of the [scope].
-function evalList(scope: Scope, list: Array<StandardExpression>, lookupFunctions: LookupFunctions, flags: BindingFlags): any[] {
+function evalList(scope: Scope, list: any[], lookupFunctions: LookupFunctions, flags: BindingFlags): any[] {
   const length = list.length;
   const result = [];
   for (let i = 0; i < length; i++) {

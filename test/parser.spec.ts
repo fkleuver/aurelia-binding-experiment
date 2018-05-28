@@ -1,7 +1,7 @@
 import { Parser } from '../src/parser';
 import { AccessKeyedExpression, AccessMemberExpression, AccessScopeExpression, AccessThisExpression,
   AssignmentExpression, BinaryExpression, BindingBehaviorExpression, CallFunctionExpression,
-  CallMemberExpression, CallScopeExpression, TernaryExpression,
+  CallMemberExpression, CallScopeExpression, ConditionalExpression,
   ArrayLiteralExpression, ObjectLiteralExpression, PrimitiveLiteralExpression, TemplateExpression,
   UnaryExpression, ValueConverterExpression } from '../src/ast';
 import { latin1IdentifierStartChars, latin1IdentifierPartChars, otherBMPIdentifierPartChars } from './unicode';
@@ -161,17 +161,17 @@ describe('Parser', () => {
 
     describe('Conditional', () => {
       const tests = [
-        { expr: '(false ? true : undefined)', paren: true, expected: new TernaryExpression($false, $true, $undefined) },
-        { expr: '("1" ? "" : "1")', paren: true, expected: new TernaryExpression($str1, $str, $str1) },
-        { expr: '("1" ? foo : "")', paren: true, expected: new TernaryExpression($str1, $foo, $str) },
-        { expr: '(false ? false : true)', paren: true, expected: new TernaryExpression($false, $false, $true) },
-        { expr: '(foo ? foo : true)', paren: true, expected: new TernaryExpression($foo, $foo, $true) },
-        { expr: 'foo() ? 1 : 2', expected: new TernaryExpression(new CallScopeExpression('foo', [], 0), $num1, $num2) },
-        { expr: 'true ? foo : false', expected: new TernaryExpression($true, $foo, $false) },
-        { expr: '"1" ? "" : "1"', expected: new TernaryExpression($str1, $str, $str1) },
-        { expr: '"1" ? foo : ""', expected: new TernaryExpression($str1, $foo, $str) },
-        { expr: 'foo ? foo : "1"', expected: new TernaryExpression($foo, $foo, $str1) },
-        { expr: 'true ? foo : bar', expected: new TernaryExpression($true, $foo, $bar) }
+        { expr: '(false ? true : undefined)', paren: true, expected: new ConditionalExpression($false, $true, $undefined) },
+        { expr: '("1" ? "" : "1")', paren: true, expected: new ConditionalExpression($str1, $str, $str1) },
+        { expr: '("1" ? foo : "")', paren: true, expected: new ConditionalExpression($str1, $foo, $str) },
+        { expr: '(false ? false : true)', paren: true, expected: new ConditionalExpression($false, $false, $true) },
+        { expr: '(foo ? foo : true)', paren: true, expected: new ConditionalExpression($foo, $foo, $true) },
+        { expr: 'foo() ? 1 : 2', expected: new ConditionalExpression(new CallScopeExpression('foo', [], 0), $num1, $num2) },
+        { expr: 'true ? foo : false', expected: new ConditionalExpression($true, $foo, $false) },
+        { expr: '"1" ? "" : "1"', expected: new ConditionalExpression($str1, $str, $str1) },
+        { expr: '"1" ? foo : ""', expected: new ConditionalExpression($str1, $foo, $str) },
+        { expr: 'foo ? foo : "1"', expected: new ConditionalExpression($foo, $foo, $str1) },
+        { expr: 'true ? foo : bar', expected: new ConditionalExpression($true, $foo, $bar) }
       ];
 
       for (const { expr, expected, paren } of tests) {
@@ -180,9 +180,9 @@ describe('Parser', () => {
         });
 
         const nestedTests = [
-          { expr: `${expr} ? a : b`, expected: paren ? new TernaryExpression(expected, $a, $b) : new TernaryExpression(expected.condition, expected.yes, new TernaryExpression(<any>expected.no, $a, $b)) },
-          { expr: `a[b] ? ${expr} : a=((b))`, expected: new TernaryExpression(new AccessKeyedExpression($a, $b), expected, new AssignmentExpression($a, $b)) },
-          { expr: `a ? !b===!a : ${expr}`, expected: new TernaryExpression($a, new BinaryExpression('===', new UnaryExpression('!', $b), new UnaryExpression('!', $a)), expected) }
+          { expr: `${expr} ? a : b`, expected: paren ? new ConditionalExpression(expected as any, $a, $b) : new ConditionalExpression(expected.condition, expected.yes, new ConditionalExpression(<any>expected.no, $a, $b)) },
+          { expr: `a[b] ? ${expr} : a=((b))`, expected: new ConditionalExpression(new AccessKeyedExpression($a, $b), expected, new AssignmentExpression($a, $b)) },
+          { expr: `a ? !b===!a : ${expr}`, expected: new ConditionalExpression($a, new BinaryExpression('===', new UnaryExpression('!', $b), new UnaryExpression('!', $a)), expected) }
         ];
 
         for (const { expr: nExpr, expected: nExpected } of nestedTests) {
@@ -307,12 +307,12 @@ describe('Parser', () => {
           { expr: `foo${op}bar:$this:$parent`, expected: new Variadic($foo, 'bar', [$this0, $this1]) },
           { expr: `foo${op}bar:$parent:$this`, expected: new Variadic($foo, 'bar', [$this1, $this0]) },
           { expr: `foo${op}bar:$parent.$parent:$parent.$parent`, expected: new Variadic($foo, 'bar', [$this2, $this2]) },
-          { expr: `foo${op}bar:"1"?"":"1":true?foo:bar`, expected: new Variadic($foo, 'bar', [new TernaryExpression($str1, $str, $str1), new TernaryExpression($true, $foo, $bar)]) },
+          { expr: `foo${op}bar:"1"?"":"1":true?foo:bar`, expected: new Variadic($foo, 'bar', [new ConditionalExpression($str1, $str, $str1), new ConditionalExpression($true, $foo, $bar)]) },
           { expr: `foo${op}bar:[1<=0]:[[],[[]]]`, expected: new Variadic($foo, 'bar', [new ArrayLiteralExpression([new BinaryExpression('<=', $num1, $num0)]), new ArrayLiteralExpression([$arr, new ArrayLiteralExpression([$arr])])]) },
-          { expr: `foo${op}bar:{foo:a?b:c}:{1:1}`, expected: new Variadic($foo, 'bar', [new ObjectLiteralExpression(['foo'], [new TernaryExpression($a, $b, $c)]), new ObjectLiteralExpression([1], [$num1])]) },
+          { expr: `foo${op}bar:{foo:a?b:c}:{1:1}`, expected: new Variadic($foo, 'bar', [new ObjectLiteralExpression(['foo'], [new ConditionalExpression($a, $b, $c)]), new ObjectLiteralExpression([1], [$num1])]) },
           { expr: `foo${op}bar:a(b({})[c()[d()]])`, expected: new Variadic($foo, 'bar', [new CallScopeExpression('a', [new AccessKeyedExpression(new CallScopeExpression('b', [$obj], 0), new AccessKeyedExpression(new CallScopeExpression('c', [], 0), new CallScopeExpression('d', [], 0)))], 0)]) },
           { expr: `a(b({})[c()[d()]])${op}bar`, expected: new Variadic(new CallScopeExpression('a', [new AccessKeyedExpression(new CallScopeExpression('b', [$obj], 0), new AccessKeyedExpression(new CallScopeExpression('c', [], 0), new CallScopeExpression('d', [], 0)))], 0), 'bar', []) },
-          { expr: `true?foo:bar${op}bar`, expected: new Variadic(new TernaryExpression($true, $foo, $bar), 'bar', []) },
+          { expr: `true?foo:bar${op}bar`, expected: new Variadic(new ConditionalExpression($true, $foo, $bar), 'bar', []) },
           { expr: `$parent.$parent${op}bar`, expected: new Variadic($this2, 'bar', []) }
         ];
 
@@ -404,7 +404,7 @@ describe('Parser', () => {
 
     it('chained Assign', () => {
       const expr = parser.parse('foo = bar = baz');
-      verifyEqual(expr, new AssignmentExpression(new AssignmentExpression($foo, $bar), $baz));
+      verifyEqual(expr, new AssignmentExpression($foo, new AssignmentExpression($bar, $baz)));
     });
 
     describe('CallExpression', () => {
@@ -551,7 +551,7 @@ describe('Parser', () => {
         { expr: 'foo,bar', expected: new ObjectLiteralExpression(['foo', 'bar'], [$foo, $bar]) },
         { expr: 'foo:bar', expected: new ObjectLiteralExpression(['foo'], [$bar]) },
         { expr: 'foo:bar()', expected: new ObjectLiteralExpression(['foo'], [new CallScopeExpression('bar', [], 0)]) },
-        { expr: 'foo:a?b:c', expected: new ObjectLiteralExpression(['foo'], [new TernaryExpression($a, $b, $c)]) },
+        { expr: 'foo:a?b:c', expected: new ObjectLiteralExpression(['foo'], [new ConditionalExpression($a, $b, $c)]) },
         { expr: 'foo:bar=((baz))', expected: new ObjectLiteralExpression(['foo'], [new AssignmentExpression($bar, $baz)]) },
         { expr: 'foo:(bar)===baz', expected: new ObjectLiteralExpression(['foo'], [new BinaryExpression('===', $bar, $baz)]) },
         { expr: 'foo:[bar]', expected: new ObjectLiteralExpression(['foo'], [new ArrayLiteralExpression([$bar])]) },
