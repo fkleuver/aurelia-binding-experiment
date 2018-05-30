@@ -195,31 +195,30 @@ function parse<T extends Precedence>(state: ParserState, context: Access, minPre
        *   IdentifierName
        *   StringLiteral
        *   NumericLiteral
-       *
-       * TODO: above spec is not matched yet
        */
       const keys = [];
       const values = [];
       nextToken(state);
-      while (state.currentToken !== <any>Token.CloseBrace) {
-        if (state.currentToken & Token.IdentifierName) {
-          const { currentChar, index } = state;
-          const currentToken: Token = state.currentToken;
-          keys.push(state.tokenValue);
+      while (state.currentToken !== Token.CloseBrace) {
+        keys.push(state.tokenValue);
+        // Literal = mandatory colon
+        if (state.currentToken & Token.Literal) {
+          nextToken(state);
+          expect(state, Token.Colon);
+          values.push(parse(state, Access.Reset, Precedence.Assignment));
+        } else if (state.currentToken & Token.IdentifierName) {
+          // IdentifierName = optional colon
+          const { currentChar, currentToken, index } = <any>state;
           nextToken(state);
           if (optional(state, Token.Colon)) {
-            values.push(parse(state, context, Precedence.Conditional));
+            values.push(parse(state, Access.Reset, Precedence.Assignment));
           } else {
+            // Shorthand
             state.currentChar = currentChar;
             state.currentToken = currentToken;
             state.index = index;
             values.push(parse(state, Access.Reset, Precedence.Primary));
           }
-        } else if (state.currentToken & Token.Literal) {
-          keys.push(state.tokenValue);
-          nextToken(state);
-          expect(state, Token.Colon);
-          values.push(parse(state, context, Precedence.Conditional));
         } else {
           error(state);
         }
