@@ -145,6 +145,11 @@ describe('Parser', () => {
       const tests = [
         { expr: '[1 <= 0]', expected: new ArrayLiteralExpression([new BinaryExpression('<=', $num1, $num0)]) },
         { expr: '[0]', expected: new ArrayLiteralExpression([$num0])},
+        { expr: '[,]', expected: new ArrayLiteralExpression([$undefined, $undefined])},
+        { expr: '[,,]', expected: new ArrayLiteralExpression([$undefined, $undefined, $undefined])},
+        { expr: '[0,,]', expected: new ArrayLiteralExpression([$num0, $undefined, $undefined])},
+        { expr: '[,0,]', expected: new ArrayLiteralExpression([$undefined, $num0, $undefined])},
+        { expr: '[,,0]', expected: new ArrayLiteralExpression([$undefined, $undefined, $num0])},
         { expr: '[]', expected: $arr},
         { expr: '[[[]]]', expected: new ArrayLiteralExpression([new ArrayLiteralExpression([$arr])])},
         { expr: '[[],[[]]]', expected: new ArrayLiteralExpression([$arr, new ArrayLiteralExpression([$arr])])},

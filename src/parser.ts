@@ -163,15 +163,22 @@ function parse<T extends Precedence>(state: ParserState, access: Access, minPrec
        * Elision :
        *  ,
        *  Elision ,
-       *
-       * TODO: above spec is not matched yet
        */
       nextToken(state);
       const elements = new Array<IsAssignmentExpression>();
-      if (state.currentToken !== <any>Token.CloseBracket) {
-        do {
-          elements.push(parse(state, access, Precedence.Conditional));
-        } while (optional(state, Token.Comma));
+      while (state.currentToken !== <any>Token.CloseBracket) {
+        if (optional(state, Token.Comma)) {
+          elements.push(new PrimitiveLiteralExpression(undefined));
+          if (state.currentToken === <any>Token.CloseBracket) {
+            elements.push(new PrimitiveLiteralExpression(undefined));
+            break;
+          }
+        } else {
+          elements.push(parse(state, access, Precedence.Assignment));
+          if (!optional(state, Token.Comma)) {
+            break;
+          }
+        }
       }
       expect(state, Token.CloseBracket);
       result = new ArrayLiteralExpression(elements);
