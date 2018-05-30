@@ -3,9 +3,9 @@ import {
   AccessThisExpression, AccessScopeExpression, AccessMemberExpression, AccessKeyedExpression,
   CallScopeExpression, CallFunctionExpression, CallMemberExpression,
   UnaryExpression, BindingBehaviorExpression, BinaryExpression,
-  PrimitiveLiteralExpression, ArrayLiteralExpression, ObjectLiteralExpression, TemplateExpression,
-  LeftHandSideExpression, IsAssignmentExpression, IsBinaryExpression, IsBindingBehaviorExpression, IsConditionalExpression,
-  IsUnaryExpression, IsValueConverterExpression, AssignableExpression, PrimaryExpression
+  PrimitiveLiteralExpression, ArrayLiteralExpression, ObjectLiteralExpression, TemplateExpression, TaggedTemplateExpression,
+  IsLeftHandSideExpression, IsAssignmentExpression, IsBinaryExpression, IsBindingBehaviorExpression, IsConditionalExpression,
+  IsUnaryExpression, IsValueConverterExpression, IsAssignableExpression, IsPrimaryExpression
 } from './ast';
 
 export class Parser {
@@ -52,11 +52,13 @@ class ParserState {
   }
 }
 
-function parse<T extends Precedence>(state: ParserState, context: Access, minPrecedence: T):
-  T extends Precedence.Variadic ? IsBindingBehaviorExpression :
-  T extends Precedence.Conditional ? IsAssignmentExpression :
-  T extends Precedence.Primary ? PrimaryExpression :
-  T extends Precedence.CallOrMember ? LeftHandSideExpression : any {
+function parse<T extends Precedence>(state: ParserState, access: Access, minPrecedence: T):
+  T extends Precedence.Primary ? IsPrimaryExpression :
+  T extends Precedence.LeftHandSide ? IsLeftHandSideExpression :
+  T extends Precedence.Binary ? IsBinaryExpression :
+  T extends Precedence.Conditional ? IsConditionalExpression :
+  T extends Precedence.Assignment ? IsAssignmentExpression :
+  T extends Precedence.Variadic ? IsBindingBehaviorExpression : IsBinaryExpression {
 
   let exprStart = state.index;
   state.assignable = Precedence.Binary > minPrecedence;
@@ -82,7 +84,7 @@ function parse<T extends Precedence>(state: ParserState, context: Access, minPre
      */
     const op = TokenValues[state.currentToken & Token.Type];
     nextToken(state);
-    result = new UnaryExpression(<any>op, parse(state, context, Precedence.Primary));
+    result = new UnaryExpression(<any>op, parse(state, access, Precedence.Primary));
   } else {
     /** parsePrimaryExpression
      * https://tc39.github.io/ecma262/#sec-primary-expression
@@ -114,15 +116,15 @@ function parse<T extends Precedence>(state: ParserState, context: Access, minPre
       state.assignable = false;
       do {
         nextToken(state);
-        context++; // ancestor
+        access++; // ancestor
         if (optional(state, Token.Dot)) {
           if (state.currentToken === <any>Token.Dot) {
             error(state);
           }
           continue;
         } else if (state.currentToken & Token.AccessScopeTerminal) {
-          result = new AccessThisExpression(context & Access.Ancestor);
-          context = Access.This;
+          result = new AccessThisExpression(access & Access.Ancestor);
+          access = Access.This;
           break primary;
         } else {
           error(state);
@@ -130,15 +132,15 @@ function parse<T extends Precedence>(state: ParserState, context: Access, minPre
       } while (state.currentToken === Token.ParentScope);
     // falls through
     case Token.Identifier: // identifier
-      result = new AccessScopeExpression(<string>state.tokenValue, context & Access.Ancestor);
+      result = new AccessScopeExpression(<string>state.tokenValue, access & Access.Ancestor);
       nextToken(state);
-      context = Access.Scope;
+      access = Access.Scope;
       break;
     case Token.ThisScope: // $this
       state.assignable = false;
       nextToken(state);
       result = new AccessThisExpression(0);
-      context = Access.This;
+      access = Access.This;
       break;
     case Token.OpenParen: // parenthesized expression
       nextToken(state);
@@ -165,10 +167,10 @@ function parse<T extends Precedence>(state: ParserState, context: Access, minPre
        * TODO: above spec is not matched yet
        */
       nextToken(state);
-      const elements = [];
+      const elements = new Array<IsAssignmentExpression>();
       if (state.currentToken !== <any>Token.CloseBracket) {
         do {
-          elements.push(parse(state, context, Precedence.Conditional));
+          elements.push(parse(state, access, Precedence.Conditional));
         } while (optional(state, Token.Comma));
       }
       expect(state, Token.CloseBracket);
@@ -196,13 +198,13 @@ function parse<T extends Precedence>(state: ParserState, context: Access, minPre
        *   StringLiteral
        *   NumericLiteral
        */
-      const keys = [];
-      const values = [];
+      const keys = new Array<string | number>();
+      const values = new Array<IsAssignmentExpression>();
       nextToken(state);
       while (state.currentToken !== Token.CloseBrace) {
         keys.push(state.tokenValue);
         // Literal = mandatory colon
-        if (state.currentToken & Token.Literal) {
+        if (state.currentToken & Token.StringOrNumericLiteral) {
           nextToken(state);
           expect(state, Token.Colon);
           values.push(parse(state, Access.Reset, Precedence.Assignment));
@@ -231,7 +233,7 @@ function parse<T extends Precedence>(state: ParserState, context: Access, minPre
       state.assignable = false;
       break;
     case Token.TemplateTail:
-      result = new TemplateExpression([<string>state.tokenValue], undefined, undefined, undefined);
+      result = new TemplateExpression([<string>state.tokenValue]);
       state.assignable = false;
       nextToken(state);
       break;
@@ -269,14 +271,14 @@ function parse<T extends Precedence>(state: ParserState, context: Access, minPre
        *
        * TODO: de-duplicate template parsing logic
        */
-      const cooked: Array<string> = [<string>state.tokenValue];
+      const cooked = [<string>state.tokenValue];
       expect(state, Token.TemplateContinuation);
-      const expressions = [parse(state, context, Precedence.Conditional)];
+      const expressions = [parse(state, access, Precedence.Assignment)];
 
       while ((state.currentToken = scanTemplateTail(state)) !== Token.TemplateTail) {
         cooked.push(<string>state.tokenValue);
         expect(state, Token.TemplateContinuation);
-        expressions.push(parse(state, context, Precedence.Conditional));
+        expressions.push(parse(state, access, Precedence.Assignment));
       }
 
       cooked.push(<string>state.tokenValue);
@@ -305,7 +307,7 @@ function parse<T extends Precedence>(state: ParserState, context: Access, minPre
         error(state);
       }
     }
-    if (Precedence.CallOrMember < minPrecedence) return result;
+    if (Precedence.LeftHandSide < minPrecedence) return result;
 
     /** parseMemberExpression (Token.Dot, Token.OpenBracket, Token.TemplateContinuation)
      * MemberExpression :
@@ -343,11 +345,11 @@ function parse<T extends Precedence>(state: ParserState, context: Access, minPre
         name = state.tokenValue;
         nextToken(state);
         // Change $This to $Scope, change $Scope to $Member, keep $Member as-is, change $Keyed to $Member, disregard other flags
-        context = ((context & (Access.This | Access.Scope)) << 1) | (context & Access.Member) | ((context & Access.Keyed) >> 1);
+        access = ((access & (Access.This | Access.Scope)) << 1) | (access & Access.Member) | ((access & Access.Keyed) >> 1);
         if (state.currentToken === <any>Token.OpenParen) {
           continue;
         }
-        if (context & Access.Scope) {
+        if (access & Access.Scope) {
           result = new AccessScopeExpression(<string>name, (<any>result).ancestor);
         } else { // if it's not $Scope, it's $Member
           result = new AccessMemberExpression(result, <string>name);
@@ -356,14 +358,14 @@ function parse<T extends Precedence>(state: ParserState, context: Access, minPre
       case Token.OpenBracket:
         state.assignable = true;
         nextToken(state);
-        context = Access.Keyed;
+        access = Access.Keyed;
         result = new AccessKeyedExpression(result, parse(state, Access.Reset, Precedence.Conditional));
         expect(state, Token.CloseBracket);
         break;
       case Token.OpenParen:
         state.assignable = false;
         nextToken(state);
-        const args = [];
+        const args = new Array<IsAssignmentExpression>();
         while (state.currentToken !== <any>Token.CloseParen) {
           args.push(parse(state, Access.Reset, Precedence.Conditional));
           if (!optional(state, Token.Comma)) {
@@ -371,18 +373,18 @@ function parse<T extends Precedence>(state: ParserState, context: Access, minPre
           }
         }
         expect(state, Token.CloseParen);
-        if (context & Access.Scope) {
+        if (access & Access.Scope) {
           result = new CallScopeExpression(<string>name, args, (<any>result).ancestor);
-        } else if (context & Access.Member) {
+        } else if (access & Access.Member) {
           result = new CallMemberExpression(result, <string>name, args);
         } else {
           result = new CallFunctionExpression(result, args);
         }
-        context = 0;
+        access = 0;
         break;
       case Token.TemplateTail:
         state.assignable = false;
-        result = new TemplateExpression([<string>state.tokenValue], [], [state.tokenRaw], result);
+        result = new TaggedTemplateExpression([<string>state.tokenValue], [state.tokenRaw], result);
         nextToken(state);
         break;
       case Token.TemplateContinuation:
@@ -420,22 +422,22 @@ function parse<T extends Precedence>(state: ParserState, context: Access, minPre
          * TODO: de-duplicate template parsing logic
          */
         state.assignable = false;
-        const cooked: Array<string> = [<string>state.tokenValue];
-        const raw: string[] = [state.tokenRaw];
+        const cooked = [<string>state.tokenValue];
+        const raw = [state.tokenRaw];
         expect(state, Token.TemplateContinuation);
-        const expressions = [parse(state, context, Precedence.Conditional)];
+        const expressions = [parse(state, access, Precedence.Assignment)];
 
         while ((state.currentToken = scanTemplateTail(state)) !== Token.TemplateTail) {
           cooked.push(<string>state.tokenValue);
           raw.push(state.tokenRaw);
           expect(state, Token.TemplateContinuation);
-          expressions.push(parse(state, context, Precedence.Conditional));
+          expressions.push(parse(state, access, Precedence.Assignment));
         }
 
         cooked.push(<string>state.tokenValue);
         raw.push(state.tokenRaw);
         nextToken(state);
-        result = new TemplateExpression(cooked, expressions, raw, result);
+        result = new TaggedTemplateExpression(cooked, raw, result, expressions);
       default:
       }
     }
@@ -475,7 +477,7 @@ function parse<T extends Precedence>(state: ParserState, context: Access, minPre
       break;
     }
     nextToken(state);
-    result = new BinaryExpression(<string>TokenValues[opToken & Token.Type], result, <any>parse(state, context, opToken & Token.Precedence));
+    result = new BinaryExpression(<string>TokenValues[opToken & Token.Type], result, parse(state, access, opToken & Token.Precedence));
     state.assignable = false;
   }
   if (Precedence.Conditional < minPrecedence) return result;
@@ -491,9 +493,9 @@ function parse<T extends Precedence>(state: ParserState, context: Access, minPre
    *   1,2 = false
    */
   if (optional(state, Token.Question)) {
-    const yes = parse(state, context, Precedence.Conditional);
+    const yes = parse(state, access, Precedence.Assignment);
     expect(state, Token.Colon);
-    result = new ConditionalExpression(result, yes, parse(state, context, Precedence.Conditional));
+    result = new ConditionalExpression(result, yes, parse(state, access, Precedence.Assignment));
     state.assignable = false;
   }
 
@@ -513,7 +515,7 @@ function parse<T extends Precedence>(state: ParserState, context: Access, minPre
       error(state, `Expression ${state.input.slice(exprStart, state.startIndex)} is not assignable`);
     }
     exprStart = state.index;
-    result = new AssignmentExpression(result, parse(state, context, Precedence.Conditional));
+    result = new AssignmentExpression(result, parse(state, access, Precedence.Assignment));
   }
   if (Precedence.Variadic < minPrecedence) return result;
 
@@ -522,9 +524,9 @@ function parse<T extends Precedence>(state: ParserState, context: Access, minPre
   while (optional(state, Token.Bar)) {
     const name = <string>state.tokenValue;
     nextToken(state);
-    const args = [];
+    const args = new Array<IsAssignmentExpression>();
     while (optional(state, Token.Colon)) {
-      args.push(parse(state, context, Precedence.Conditional));
+      args.push(parse(state, access, Precedence.Assignment));
     }
     result = new ValueConverterExpression(result, name, args);
   }
@@ -534,9 +536,9 @@ function parse<T extends Precedence>(state: ParserState, context: Access, minPre
   while (optional(state, Token.Ampersand)) {
     const name = <string>state.tokenValue;
     nextToken(state);
-    const args = [];
+    const args = new Array<IsAssignmentExpression>();
     while (optional(state, Token.Colon)) {
-      args.push(parse(state, context, Precedence.Conditional));
+      args.push(parse(state, access, Precedence.Assignment));
     }
     result = new BindingBehaviorExpression(result, name, args);
   }
@@ -547,26 +549,8 @@ function parse<T extends Precedence>(state: ParserState, context: Access, minPre
 }
 
 function nextToken(state: ParserState): void {
-  /*
-   * Each index in CharScanners (0-65535) contains a scan function for the charCode with that number.
-   * The array is "zero-filled" with a throwing function and has functions for all ASCII chars (except ~@#`\)
-   * and IdentifierParts from the Latin1 script (1314 in total).
-   * Additional characters can be added via addIdentifierStart / addIdentifierPart.
-   */
   while (state.index < state.length) {
-    if (state.currentChar <= Char.Space) {
-      nextChar(state);
-      continue;
-    }
     state.startIndex = state.index;
-    if (state.currentChar === Char.Dollar || (state.currentChar >= Char.LowerA && state.currentChar <= Char.LowerZ)) {
-      state.currentToken = scanIdentifier(state);
-      return;
-    }
-    /*
-     * Note: the lookup below could also handle the characters which are handled above. It's just a performance tweak (direct
-     * comparisons are faster than array indexers)
-     */
     if (((<any>state.currentToken) = CharScanners[state.currentChar](state)) !== null) { // a null token means the character must be skipped
       return;
     }
@@ -580,10 +564,7 @@ function nextChar(state: ParserState): number {
 
 function scanIdentifier(state: ParserState): Token.Identifier | typeof KeywordLookup[keyof typeof KeywordLookup] {
   // run to the next non-idPart
-  while (AsciiIdParts.has(nextChar(state))
-    // Note: "while(IdParts[nextChar(state)])" would be enough to make this work. This is just a performance
-    // tweak, similar to the one in nextToken()
-    || (state.currentChar > 0x7F && IdParts[state.currentChar])) { } // eslint-disable-line no-empty
+  while (IdParts[nextChar(state)]) {}
 
   return KeywordLookup[state.tokenValue = state.tokenRaw] || Token.Identifier;
 }
@@ -779,7 +760,7 @@ const enum Precedence {
   Additive                = 0b00000000000000101000000, // 5 << 6
   Multiplicative          = 0b00000000000000110000000, // 6 << 6
   Binary                  = 0b00000000000000111000000, // 7 << 6
-  CallOrMember            = 0b00000000000000111000000, // Binary + 1
+  LeftHandSide            = 0b00000000000000111000000, // Binary + 1
   Primary                 = 0b00000000000000111000001, // Binary + 2
   Unary                   = 0b00000000000000111000010, // Binary + 3
   //                                        |
@@ -796,8 +777,8 @@ const enum Token {
   IdentifierName          = 0b00000011000000000000000, // Identifier | Keyword,
   NumericLiteral          = 0b00000100000000000000000, // 1 << 17,
   StringLiteral           = 0b00001000000000000000000, // 1 << 18,
-  Literal                 = 0b00001100000000000000000, // NumericLiteral | StringLiteral,
-  PropertyName            = 0b00001111000000000000000, // IdentifierName | Literal,
+  StringOrNumericLiteral  = 0b00001100000000000000000, // NumericLiteral | StringLiteral,
+  PropertyName            = 0b00001111000000000000000, // IdentifierName | StringOrNumericLiteral,
   LeftHandSide            = 0b00010000000000000000000, // 1 << 19,
   BinaryOp                = 0b01000000000000000000000, // 1 << 21,
   UnaryOp                 = 0b10000000000000000000000, // 1 << 22,

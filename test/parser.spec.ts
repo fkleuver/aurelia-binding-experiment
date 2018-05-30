@@ -3,7 +3,7 @@ import { AccessKeyedExpression, AccessMemberExpression, AccessScopeExpression, A
   AssignmentExpression, BinaryExpression, BindingBehaviorExpression, CallFunctionExpression,
   CallMemberExpression, CallScopeExpression, ConditionalExpression,
   ArrayLiteralExpression, ObjectLiteralExpression, PrimitiveLiteralExpression, TemplateExpression,
-  UnaryExpression, ValueConverterExpression } from '../src/ast';
+  UnaryExpression, ValueConverterExpression, TaggedTemplateExpression } from '../src/ast';
 import { latin1IdentifierStartChars, latin1IdentifierPartChars, otherBMPIdentifierPartChars } from './unicode';
 import { expect } from 'chai';
 
@@ -94,9 +94,9 @@ describe('Parser', () => {
         { expr: '`${ {foo: 1} }`', expected: new TemplateExpression(['', ''], [new ObjectLiteralExpression(['foo'], [$num1])]) },
         { expr: '`a${"foo"}b`', expected: new TemplateExpression(['a', 'b'], [new PrimitiveLiteralExpression('foo')]) },
         { expr: '`a${"foo"}b${"foo"}c`', expected: new TemplateExpression(['a', 'b', 'c'], [new PrimitiveLiteralExpression('foo'), new PrimitiveLiteralExpression('foo')]) },
-        { expr: 'foo`a${"foo"}b`', expected: new TemplateExpression(['a', 'b'], [new PrimitiveLiteralExpression('foo')], ['a', 'b'], $foo) },
-        { expr: 'foo`bar`', expected: new TemplateExpression(['bar'], [], ['bar'], $foo) },
-        { expr: 'foo`\r\n`', expected: new TemplateExpression(['\r\n'], [], ['\\r\\n'], $foo) }
+        { expr: 'foo`a${"foo"}b`', expected: new TaggedTemplateExpression(['a', 'b'], ['a', 'b'], $foo, [new PrimitiveLiteralExpression('foo')]) },
+        { expr: 'foo`bar`', expected: new TaggedTemplateExpression(['bar'], ['bar'], $foo, []) },
+        { expr: 'foo`\r\n`', expected: new TaggedTemplateExpression(['\r\n'], ['\\r\\n'], $foo, []) }
       ];
 
       for (const { expr, expected } of tests) {

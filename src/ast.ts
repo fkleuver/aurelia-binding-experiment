@@ -2,19 +2,15 @@ import { getContextFor } from './scope';
 import { connectBindingToSignal } from './signals';
 import { Scope, OverrideContext, LookupFunctions, BindingFlags, Binding } from './types';
 
-export type CallExpression = CallFunctionExpression | CallMemberExpression | CallScopeExpression;
-export type AccessExpression = AccessThisExpression | AccessScopeExpression | AccessMemberExpression | AccessKeyedExpression;
-export type LiteralExpression = ArrayLiteralExpression | ObjectLiteralExpression | PrimitiveLiteralExpression | TemplateExpression;
-
-export type PrimaryExpression = AccessExpression | LiteralExpression | UnaryExpression;
-export type LeftHandSideExpression = PrimaryExpression | CallExpression;
-export type IsUnaryExpression = LeftHandSideExpression | UnaryExpression;
-export type IsBinaryExpression = IsUnaryExpression | BinaryExpression;
+export type IsPrimaryExpression = AccessThisExpression | AccessScopeExpression | ArrayLiteralExpression | ObjectLiteralExpression | PrimitiveLiteralExpression | TemplateExpression;
+export type IsUnaryExpression = IsPrimaryExpression | UnaryExpression;
+export type IsLeftHandSideExpression = IsUnaryExpression | CallFunctionExpression | CallMemberExpression | CallScopeExpression | AccessMemberExpression | AccessKeyedExpression | TaggedTemplateExpression;
+export type IsBinaryExpression = IsLeftHandSideExpression | BinaryExpression;
 export type IsConditionalExpression = IsBinaryExpression | ConditionalExpression;
 export type IsAssignmentExpression = IsConditionalExpression | AssignmentExpression;
 export type IsValueConverterExpression = IsAssignmentExpression | ValueConverterExpression;
 export type IsBindingBehaviorExpression = IsValueConverterExpression | BindingBehaviorExpression;
-export type AssignableExpression = AccessScopeExpression | AccessKeyedExpression | AccessMemberExpression;
+export type IsAssignableExpression = AccessScopeExpression | AccessKeyedExpression | AccessMemberExpression;
 
 export class BindingBehaviorExpression {
 
@@ -140,9 +136,9 @@ export class AssignmentExpression {
   public unbind: undefined;
   public expression: undefined;
 
-  public target: AssignableExpression;
+  public target: IsAssignableExpression;
   public value: IsAssignmentExpression;
-  constructor(target: AssignableExpression, value: IsAssignmentExpression) {
+  constructor(target: IsAssignableExpression, value: IsAssignmentExpression) {
     this.target = target;
     this.value = value;
   }
@@ -270,8 +266,8 @@ export class AccessMemberExpression {
   public expression: undefined;
 
   public name: string;
-  public object: LeftHandSideExpression;
-  constructor(object: LeftHandSideExpression, name: string) {
+  public object: IsLeftHandSideExpression;
+  constructor(object: IsLeftHandSideExpression, name: string) {
     this.object = object;
     this.name = name;
   }
@@ -311,9 +307,9 @@ export class AccessKeyedExpression {
   public unbind: undefined;
   public expression: undefined;
 
-  public object: LeftHandSideExpression;
+  public object: IsLeftHandSideExpression;
   public key: IsAssignmentExpression;
-  constructor(object: LeftHandSideExpression, key: IsAssignmentExpression) {
+  constructor(object: IsLeftHandSideExpression, key: IsAssignmentExpression) {
     this.object = object;
     this.key = key;
   }
@@ -397,8 +393,8 @@ export class CallMemberExpression {
 
   public name: string;
   public args: Array<IsAssignmentExpression>;
-  public object: LeftHandSideExpression;
-  constructor(object: LeftHandSideExpression, name: string, args: Array<IsAssignmentExpression>) {
+  public object: IsLeftHandSideExpression;
+  constructor(object: IsLeftHandSideExpression, name: string, args: Array<IsAssignmentExpression>) {
     this.object = object;
     this.name = name;
     this.args = args;
@@ -441,8 +437,8 @@ export class CallFunctionExpression {
   public expression: undefined;
 
   public args: Array<IsAssignmentExpression>;
-  public func: LeftHandSideExpression;
-  constructor(func: LeftHandSideExpression, args: Array<IsAssignmentExpression>) {
+  public func: IsLeftHandSideExpression;
+  constructor(func: IsLeftHandSideExpression, args: Array<IsAssignmentExpression>) {
     this.func = func;
     this.args = args;
   }
@@ -586,9 +582,9 @@ export class UnaryExpression {
   public bind: undefined;
   public unbind: undefined;
 
-  public expression:  LeftHandSideExpression;
+  public expression:  IsLeftHandSideExpression;
   public operation: 'void' | 'typeof' | '!' | '-' | '+';
-  constructor(operation: 'void' | 'typeof' | '!' | '-' | '+', expression: LeftHandSideExpression) {
+  constructor(operation: 'void' | 'typeof' | '!' | '-' | '+', expression: IsLeftHandSideExpression) {
     this.operation = operation;
     this.expression = expression;
   }
@@ -655,32 +651,18 @@ export class TemplateExpression {
   public expression: undefined;
 
   public expressions: Array<IsAssignmentExpression>;
-  public func?: LeftHandSideExpression;
-  public cooked: Array<string> & { raw?: Array<string> };
+  public cooked: Array<string>;
   public length: number;
-  public tagged: boolean;
-  constructor(cooked: Array<string>, expressions?: Array<IsAssignmentExpression>, raw?: Array<string>, func?: LeftHandSideExpression) {
+  constructor(cooked: Array<string>, expressions?: Array<IsAssignmentExpression>) {
     this.cooked = cooked;
     this.expressions = expressions || [];
     this.length = this.expressions.length;
-    this.tagged = func !== undefined;
-    if (this.tagged) {
-      this.cooked.raw = raw;
-      this.func = func;
-    }
   }
 
   public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): string {
     const results = new Array(this.length);
     for (let i = 0; i < this.length; i++) {
       results[i] = this.expressions[i].evaluate(scope, lookupFunctions, flags);
-    }
-    if (this.func) {
-      const func = this.func.evaluate(scope, lookupFunctions, flags);
-      if (typeof func !== 'function') {
-        throw new Error(`${this.func} is not a function`);
-      }
-      return func.call(null, this.cooked, ...results);
     }
     let result = this.cooked[0];
     for (let i = 0; i < this.length; i++) {
@@ -697,9 +679,51 @@ export class TemplateExpression {
     for (let i = 0; i < this.length; i++) {
       this.expressions[i].connect(binding, scope, flags);
     }
-    if (this.func) {
-      this.func.connect(binding, scope, flags);
+  }
+
+  public assign(scope: Scope, value: any, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
+    throw new Error(`Binding expression "${this}" cannot be assigned to.`);
+  }
+}
+
+export class TaggedTemplateExpression {
+  public bind: undefined;
+  public unbind: undefined;
+  public expression: undefined;
+
+  public cooked: Array<string> & { raw: Array<string> };
+  public func: IsLeftHandSideExpression;
+  public expressions: Array<IsAssignmentExpression>;
+  public length: number;
+  constructor(cooked: Array<string>, raw: Array<string>, func: IsLeftHandSideExpression, expressions?: Array<IsAssignmentExpression>) {
+    (<any>cooked).raw = raw;
+    this.cooked = cooked as any;
+    this.func = func;
+    this.expressions = expressions || [];
+    this.length = this.expressions.length;
+  }
+
+  public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): string {
+    const results = new Array(this.length);
+    for (let i = 0; i < this.length; i++) {
+      results[i] = this.expressions[i].evaluate(scope, lookupFunctions, flags);
     }
+    const func = this.func.evaluate(scope, lookupFunctions, flags);
+    if (typeof func !== 'function') {
+      throw new Error(`${this.func} is not a function`);
+    }
+    return func.call(null, this.cooked, ...results);
+  }
+
+  public accept(visitor: any): any {
+    return visitor.visitLiteralTemplate(this);
+  }
+
+  public connect(binding: Binding, scope: Scope, flags: BindingFlags): void {
+    for (let i = 0; i < this.length; i++) {
+      this.expressions[i].connect(binding, scope, flags);
+    }
+    this.func.connect(binding, scope, flags);
   }
 
   public assign(scope: Scope, value: any, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
