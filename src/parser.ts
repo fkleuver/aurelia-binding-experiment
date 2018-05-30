@@ -168,9 +168,9 @@ function parse<T extends Precedence>(state: ParserState, access: Access, minPrec
       const elements = new Array<IsAssignmentExpression>();
       while (state.currentToken !== <any>Token.CloseBracket) {
         if (optional(state, Token.Comma)) {
-          elements.push(new PrimitiveLiteralExpression(undefined));
+          elements.push($undefined);
           if (state.currentToken === <any>Token.CloseBracket) {
-            elements.push(new PrimitiveLiteralExpression(undefined));
+            elements.push($undefined);
             break;
           }
         } else {
@@ -303,7 +303,7 @@ function parse<T extends Precedence>(state: ParserState, access: Access, minPrec
     case Token.UndefinedKeyword:
     case Token.TrueKeyword:
     case Token.FalseKeyword:
-      result = new PrimitiveLiteralExpression(<any>TokenValues[state.currentToken & Token.Type]);
+      result = TokenValues[state.currentToken & Token.Type];
       state.assignable = false;
       nextToken(state);
       break;
@@ -961,6 +961,10 @@ KeywordLookup.instanceof = Token.InstanceOfKeyword;
 KeywordLookup.typeof = Token.TypeofKeyword;
 KeywordLookup.void = Token.VoidKeyword;
 
+const $false = new PrimitiveLiteralExpression(false);
+const $true = new PrimitiveLiteralExpression(true);
+const $null = new PrimitiveLiteralExpression(null);
+const $undefined = new PrimitiveLiteralExpression(undefined);
 /**
  * Array for mapping tokens to token values. The indices of the values
  * correspond to the token bits 0-38.
@@ -969,7 +973,7 @@ KeywordLookup.void = Token.VoidKeyword;
  * Usage: TokenValues[token & Token.Type]
  */
 const TokenValues = [
-  false, true, null, undefined, '$this', '$parent',
+  $false, $true, $null, $undefined, '$this', '$parent',
 
   '(', '{', '.', '}', ')', ';', ',', '[', ']', ':', '?', '\'', '"',
 
