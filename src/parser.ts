@@ -5,7 +5,7 @@ import {
   UnaryExpression, BindingBehaviorExpression, BinaryExpression,
   PrimitiveLiteralExpression, ArrayLiteralExpression, ObjectLiteralExpression, TemplateExpression,
   LeftHandSideExpression, IsAssignmentExpression, IsBinaryExpression, IsBindingBehaviorExpression, IsConditionalExpression,
-  IsUnaryExpression, IsValueConverterExpression, AssignableExpression
+  IsUnaryExpression, IsValueConverterExpression, AssignableExpression, PrimaryExpression
 } from './ast';
 
 export class Parser {
@@ -17,7 +17,7 @@ export class Parser {
   public parse(input: string): IsBindingBehaviorExpression {
     input = input || '';
 
-    return this.cache[input] || (this.cache[input] = parseVariadicExpression(new ParserState(input), Context.None));
+    return this.cache[input] || (this.cache[input] = parse(new ParserState(input), Context.None, Precedence.Variadic));
   }
 }
 
@@ -45,71 +45,424 @@ class ParserState {
     this.tokenValue = '';
     this.currentChar = input.charCodeAt(0);
     this.assignable = true;
+    nextToken(this);
+    if (this.currentToken & Token.ExpressionTerminal) {
+      error(this, 'Invalid start of expression');
+    }
   }
 }
 
-function parseVariadicExpression(state: ParserState, context: Context): IsBindingBehaviorExpression {
-  nextToken(state);
-  if (state.currentToken & Token.ExpressionTerminal) {
-    error(state, 'Invalid start of expression');
-  }
-  let result = parseAssignmentExpression(state, context, 0) as IsBindingBehaviorExpression;
-  while (optional(state, Token.Bar)) {
-    result = new ValueConverterExpression(result as IsValueConverterExpression, <string>state.tokenValue, parseVariadicArguments(state, context));
-  }
-  while (optional(state, Token.Ampersand)) {
-    result = new BindingBehaviorExpression(result, <string>state.tokenValue, parseVariadicArguments(state, context));
-  }
-  if (state.currentToken !== Token.EOF) {
-    error(state, `Unconsumed token ${state.tokenRaw}`);
-  }
-  return result;
-}
-
-function parseVariadicArguments(state: ParserState, context: Context): Array<IsAssignmentExpression> {
-  nextToken(state);
-  const result = [];
-  while (optional(state, Token.Colon)) {
-    result.push(parseAssignmentExpression(state, context, 0));
-  }
-  return result;
-}
-
-function parseAssignmentExpression(state: ParserState, context: Context, minPrecedence: number): IsAssignmentExpression {
+function parse<T extends Precedence>(state: ParserState, context: Context, minPrecedence: T):
+  T extends Precedence.Variadic ? IsBindingBehaviorExpression :
+  T extends Precedence.Assignment ? IsAssignmentExpression :
+  T extends Precedence.Primary ? PrimaryExpression :
+  T extends Precedence.LeftHandSide ? LeftHandSideExpression : any {
   let exprStart = state.index;
-  state.assignable = minPrecedence === 0;
-  /**
-   * parseUnaryExpression
-   * https://tc39.github.io/ecma262/#sec-unary-operators
-   *
-   * UnaryExpression :
-   *   1. LeftHandSideExpression
-   *   2. void UnaryExpression
-   *   3. typeof UnaryExpression
-   *   4. + UnaryExpression
-   *   5. - UnaryExpression
-   *   6. ! UnaryExpression
-   *
-   * IsValidAssignmentTarget
-   *   2,3,4,5,6 = false
-   *   1 = see parseLeftHandSideExpression
-   *
-   * Note: technically we should throw on ++ / -- / +++ / ---, but there's nothing to gain from that
-   */
-  let result: IsAssignmentExpression;
+  state.assignable = minPrecedence <= 0;
+  let result = <any>undefined;
+
   if (state.currentToken & Token.UnaryOp) {
+    /** parseUnaryExpression
+     * https://tc39.github.io/ecma262/#sec-unary-operators
+     *
+     * UnaryExpression :
+     *   1. LeftHandSideExpression
+     *   2. void UnaryExpression
+     *   3. typeof UnaryExpression
+     *   4. + UnaryExpression
+     *   5. - UnaryExpression
+     *   6. ! UnaryExpression
+     *
+     * IsValidAssignmentTarget
+     *   2,3,4,5,6 = false
+     *   1 = see parseLeftHandSideExpression
+     *
+     * Note: technically we should throw on ++ / -- / +++ / ---, but there's nothing to gain from that
+     */
     const op = TokenValues[state.currentToken & Token.TokenMask];
     nextToken(state);
-    result = new UnaryExpression(<any>op, parseAssignmentExpression(state, context, Precedence.Unary) as LeftHandSideExpression);
+    result = new UnaryExpression(<any>op, parse(state, context, Precedence.Primary));
   } else {
-    result = parseLeftHandSideExpression(state, context);
+    /** parsePrimaryExpression
+     * https://tc39.github.io/ecma262/#sec-primary-expression
+     *
+     * PrimaryExpression :
+     *   1. this
+     *   2. IdentifierName
+     *   3. Literal
+     *   4. ArrayLiteral
+     *   5. ObjectLiteral
+     *   6. TemplateLiteral
+     *   7. ParenthesizedExpression
+     *
+     * Literal :
+     *    NullLiteral
+     *    BooleanLiteral
+     *    NumericLiteral
+     *    StringLiteral
+     *
+     * ParenthesizedExpression :
+     *   ( AssignmentExpression )
+     *
+     * IsValidAssignmentTarget
+     *   1,3,4,5,6,7 = false
+     *   2 = true
+     */
+    primary: switch (state.currentToken) {
+    case Token.ParentScope: // $parent
+      {
+        state.assignable = false;
+        do {
+          nextToken(state);
+          context++; // ancestor
+          if (optional(state, Token.Dot)) {
+            if (state.currentToken === <any>Token.Dot) {
+              error(state);
+            }
+            continue;
+          } else if (state.currentToken & Token.AccessScopeTerminal) {
+            result = new AccessThisExpression(context & Context.Ancestor);
+            context = Context.This;
+            break primary;
+          } else {
+            error(state);
+          }
+        } while (state.currentToken === Token.ParentScope);
+      }
+    // falls through
+    case Token.Identifier: // identifier
+      {
+        result = new AccessScopeExpression(<string>state.tokenValue, context & Context.Ancestor);
+        nextToken(state);
+        context = Context.Scope;
+        break;
+      }
+    case Token.ThisScope: // $this
+      state.assignable = false;
+      nextToken(state);
+      result = new AccessThisExpression(0);
+      context = Context.This;
+      break;
+    case Token.OpenParen: // parenthesized expression
+      nextToken(state);
+      result = parse(state, 0, Precedence.Assignment);
+      expect(state, Token.CloseParen);
+      break;
+    case Token.OpenBracket:
+      {
+        /** parseArrayLiteralExpression
+         * https://tc39.github.io/ecma262/#prod-ArrayLiteral
+         *
+         * ArrayLiteral :
+         *   [ Elision(opt) ]
+         *   [ ElementList ]
+         *   [ ElementList, Elision(opt) ]
+         *
+         * ElementList :
+         *   Elision(opt) AssignmentExpression
+         *   ElementList, Elision(opt) AssignmentExpression
+         *
+         * Elision :
+         *  ,
+         *  Elision ,
+         *
+         * TODO: above spec is not matched yet
+         */
+        nextToken(state);
+        const elements = [];
+        if (state.currentToken !== <any>Token.CloseBracket) {
+          do {
+            elements.push(parse(state, context, Precedence.Assignment));
+          } while (optional(state, Token.Comma));
+        }
+        expect(state, Token.CloseBracket);
+        result = new ArrayLiteralExpression(elements);
+        state.assignable = false;
+      }
+      break;
+    case Token.OpenBrace:
+      {
+        /** parseObjectLiteralExpression
+         * https://tc39.github.io/ecma262/#prod-Literal
+         *
+         * ObjectLiteral :
+         *   { }
+         *   { PropertyDefinitionList }
+         *
+         * PropertyDefinitionList :
+         *   PropertyDefinition
+         *   PropertyDefinitionList, PropertyDefinition
+         *
+         * PropertyDefinition :
+         *   IdentifierName
+         *   PropertyName : AssignmentExpression
+         *
+         * PropertyName :
+         *   IdentifierName
+         *   StringLiteral
+         *   NumericLiteral
+         *
+         * TODO: above spec is not matched yet
+         */
+        const keys = [];
+        const values = [];
+        nextToken(state);
+        while (state.currentToken !== <any>Token.CloseBrace) {
+          if (state.currentToken & Token.IdentifierOrKeyword) {
+            const { currentChar, index } = state;
+            const currentToken: Token = state.currentToken;
+            keys.push(state.tokenValue);
+            nextToken(state);
+            if (optional(state, Token.Colon)) {
+              values.push(parse(state, context, Precedence.Assignment));
+            } else {
+              state.currentChar = currentChar;
+              state.currentToken = currentToken;
+              state.index = index;
+              values.push(parse(state, 0, Precedence.Primary));
+            }
+          } else if (state.currentToken & Token.Literal) {
+            keys.push(state.tokenValue);
+            nextToken(state);
+            expect(state, Token.Colon);
+            values.push(parse(state, context, Precedence.Assignment));
+          } else {
+            error(state);
+          }
+          if (state.currentToken !== <any>Token.CloseBrace) {
+            expect(state, Token.Comma);
+          }
+        }
+        expect(state, Token.CloseBrace);
+        result = new ObjectLiteralExpression(keys, values);
+        state.assignable = false;
+      }
+      break;
+    case Token.TemplateTail:
+      result = new TemplateExpression([<string>state.tokenValue], undefined, undefined, undefined);
+      state.assignable = false;
+      nextToken(state);
+      break;
+    case Token.TemplateContinuation:
+      {
+        /** parseTemplateLiteralExpression
+         * https://tc39.github.io/ecma262/#prod-Literal
+         *
+         * Template :
+         *   NoSubstitutionTemplate
+         *   TemplateHead
+         *
+         * NoSubstitutionTemplate :
+         *   ` TemplateCharacters(opt) `
+         *
+         * TemplateHead :
+         *   ` TemplateCharacters(opt) ${
+         *
+         * TemplateSubstitutionTail :
+         *   TemplateMiddle
+         *   TemplateTail
+         *
+         * TemplateMiddle :
+         *   } TemplateCharacters(opt) ${
+         *
+         * TemplateTail :
+         *   } TemplateCharacters(opt) `
+         *
+         * TemplateCharacters :
+         *   TemplateCharacter TemplateCharacters(opt)
+         *
+         * TemplateCharacter :
+         *   $ [lookahead ≠ {]
+         *   \ EscapeSequence
+         *   SourceCharacter (but not one of ` or \ or $)
+         *
+         * TODO: de-duplicate template parsing logic
+         */
+        const cooked: Array<string> = [<string>state.tokenValue];
+        expect(state, Token.TemplateContinuation);
+        const expressions = [parse(state, context, Precedence.Assignment)];
+
+        while ((state.currentToken = scanTemplateTail(state)) !== Token.TemplateTail) {
+          cooked.push(<string>state.tokenValue);
+          expect(state, Token.TemplateContinuation);
+          expressions.push(parse(state, context, Precedence.Assignment));
+        }
+
+        cooked.push(<string>state.tokenValue);
+        nextToken(state);
+        result = new TemplateExpression(cooked, expressions);
+        state.assignable = false;
+      }
+      break;
+    case Token.StringLiteral:
+    case Token.NumericLiteral:
+      {
+        result = new PrimitiveLiteralExpression(<any>state.tokenValue);
+        state.assignable = false;
+        nextToken(state);
+        break;
+      }
+    case Token.NullKeyword:
+    case Token.UndefinedKeyword:
+    case Token.TrueKeyword:
+    case Token.FalseKeyword:
+      result = new PrimitiveLiteralExpression(<any>TokenValues[state.currentToken & Token.TokenMask]);
+      state.assignable = false;
+      nextToken(state);
+      break;
+    default:
+      if (state.index >= state.length) {
+        error(state, 'Unexpected end of expression');
+      } else {
+        error(state);
+      }
+    }
+
+    if (minPrecedence > Precedence.LeftHandSide) {
+      return result;
+    }
+
+    /** parseMemberExpression (Token.Dot, Token.OpenBracket, Token.TemplateContinuation)
+     * MemberExpression :
+     *   1. PrimaryExpression
+     *   2. MemberExpression [ AssignmentExpression ]
+     *   3. MemberExpression . IdentifierName
+     *   4. MemberExpression TemplateLiteral
+     *
+     * IsValidAssignmentTarget
+     *   1,4 = false
+     *   2,3 = true
+     *
+     *
+     * parseCallExpression (Token.OpenParen)
+     * CallExpression :
+     *   1. MemberExpression Arguments
+     *   2. CallExpression Arguments
+     *   3. CallExpression [ AssignmentExpression ]
+     *   4. CallExpression . IdentifierName
+     *   5. CallExpression TemplateLiteral
+     *
+     * IsValidAssignmentTarget
+     *   1,2,5 = false
+     *   3,4 = true
+     */
+    let name = state.tokenValue;
+    while (state.currentToken & Token.MemberOrCallExpression) {
+      switch (<any>state.currentToken) {
+      case Token.Dot:
+        state.assignable = true;
+        nextToken(state);
+        if (!(state.currentToken & Token.IdentifierOrKeyword)) {
+          error(state);
+        }
+        name = state.tokenValue;
+        nextToken(state);
+        // Change $This to $Scope, change $Scope to $Member, keep $Member as-is, change $Keyed to $Member, disregard other flags
+        context = ((context & (Context.This | Context.Scope)) << 1) | (context & Context.Member) | ((context & Context.Keyed) >> 1);
+        if (state.currentToken === <any>Token.OpenParen) {
+          continue;
+        }
+        if (context & Context.Scope) {
+          result = new AccessScopeExpression(<string>name, (<any>result).ancestor);
+        } else { // if it's not $Scope, it's $Member
+          result = new AccessMemberExpression(result, <string>name);
+        }
+        continue;
+      case Token.OpenBracket:
+        state.assignable = true;
+        nextToken(state);
+        context = Context.Keyed;
+        result = new AccessKeyedExpression(result, parse(state, 0, Precedence.Assignment));
+        expect(state, Token.CloseBracket);
+        break;
+      case Token.OpenParen:
+        state.assignable = false;
+        nextToken(state);
+        const args = [];
+        while (state.currentToken !== <any>Token.CloseParen) {
+          args.push(parse(state, 0, Precedence.Assignment));
+          if (!optional(state, Token.Comma)) {
+            break;
+          }
+        }
+        expect(state, Token.CloseParen);
+        if (context & Context.Scope) {
+          result = new CallScopeExpression(<string>name, args, (<any>result).ancestor);
+        } else if (context & Context.Member) {
+          result = new CallMemberExpression(result, <string>name, args);
+        } else {
+          result = new CallFunctionExpression(result, args);
+        }
+        context = 0;
+        break;
+      case Token.TemplateTail:
+        state.assignable = false;
+        result = new TemplateExpression([<string>state.tokenValue], [], [state.tokenRaw], result);
+        nextToken(state);
+        break;
+      case Token.TemplateContinuation:
+        {
+          /** parseTemplateLiteralExpression
+           * https://tc39.github.io/ecma262/#prod-Literal
+           *
+           * Template :
+           *   NoSubstitutionTemplate
+           *   TemplateHead
+           *
+           * NoSubstitutionTemplate :
+           *   ` TemplateCharacters(opt) `
+           *
+           * TemplateHead :
+           *   ` TemplateCharacters(opt) ${
+           *
+           * TemplateSubstitutionTail :
+           *   TemplateMiddle
+           *   TemplateTail
+           *
+           * TemplateMiddle :
+           *   } TemplateCharacters(opt) ${
+           *
+           * TemplateTail :
+           *   } TemplateCharacters(opt) `
+           *
+           * TemplateCharacters :
+           *   TemplateCharacter TemplateCharacters(opt)
+           *
+           * TemplateCharacter :
+           *   $ [lookahead ≠ {]
+           *   \ EscapeSequence
+           *   SourceCharacter (but not one of ` or \ or $)
+           *
+           * TODO: de-duplicate template parsing logic
+           */
+          state.assignable = false;
+          const cooked: Array<string> = [<string>state.tokenValue];
+          const raw: string[] = [state.tokenRaw];
+          expect(state, Token.TemplateContinuation);
+          const expressions = [parse(state, context, Precedence.Assignment)];
+
+          while ((state.currentToken = scanTemplateTail(state)) !== Token.TemplateTail) {
+            cooked.push(<string>state.tokenValue);
+            raw.push(state.tokenRaw);
+            expect(state, Token.TemplateContinuation);
+            expressions.push(parse(state, context, Precedence.Assignment));
+          }
+
+          cooked.push(<string>state.tokenValue);
+          raw.push(state.tokenRaw);
+          nextToken(state);
+          result = new TemplateExpression(cooked, expressions, raw, result);
+        }
+      default:
+      }
+    }
   }
+
   if (minPrecedence > Precedence.Binary) {
     return result;
   }
 
-  /**
-   * parseBinaryExpression
+  /** parseBinaryExpression
    * https://tc39.github.io/ecma262/#sec-multiplicative-operators
    *
    * MultiplicativeExpression : (local precedence 6)
@@ -142,14 +495,13 @@ function parseAssignmentExpression(state: ParserState, context: Context, minPrec
       break;
     }
     nextToken(state);
-    result = new BinaryExpression(<string>TokenValues[opToken & Token.TokenMask], result as IsBinaryExpression, parseAssignmentExpression(state, context, opToken & Precedence.Binary) as IsBinaryExpression);
+    result = new BinaryExpression(<string>TokenValues[opToken & Token.TokenMask], result, <any>parse(state, context, opToken & Precedence.Binary));
   }
   if (minPrecedence > 0) {
     return result;
   }
 
-  /**
-   * parseConditionalExpression
+  /** parseConditionalExpression
    * https://tc39.github.io/ecma262/#prod-ConditionalExpression
    *
    * ConditionalExpression :
@@ -160,17 +512,16 @@ function parseAssignmentExpression(state: ParserState, context: Context, minPrec
    *   1,2 = false
    */
   if (optional(state, Token.Question)) {
-    const yes = parseAssignmentExpression(state, context, 0);
+    const yes = parse(state, context, Precedence.Assignment);
     expect(state, Token.Colon);
-    result = new ConditionalExpression(result, yes, parseAssignmentExpression(state, context, 0));
+    result = new ConditionalExpression(result, yes, parse(state, context, Precedence.Assignment));
     state.assignable = false;
   }
   if (minPrecedence > 0) {
     return result;
   }
 
-  /**
-   * parseAssignmentExpression
+  /** parseAssignmentExpression
    * https://tc39.github.io/ecma262/#prod-AssignmentExpression
    * Note: AssignmentExpression here is equivalent to ES Expression because we don't parse the comma operator
    *
@@ -187,363 +538,34 @@ function parseAssignmentExpression(state: ParserState, context: Context, minPrec
     }
     nextToken(state);
     exprStart = state.index;
-    result = new AssignmentExpression(result as AssignableExpression, parseAssignmentExpression(state, context, 0));
+    result = new AssignmentExpression(result, parse(state, context, Precedence.Assignment));
   }
-
-  return result;
-}
-
-/**
- * https://tc39.github.io/ecma262/#sec-left-hand-side-expressions
- *
- * LeftHandSideExpression :
- *   MemberExpression
- *   CallExpression
- */
-function parseLeftHandSideExpression(state: ParserState, context: Context): LeftHandSideExpression {
-  /**
-   * parsePrimaryExpression
-   * https://tc39.github.io/ecma262/#sec-primary-expression
-   *
-   * PrimaryExpression :
-   *   1. this
-   *   2. IdentifierName
-   *   3. Literal
-   *   4. ArrayLiteral
-   *   5. ObjectLiteral
-   *   6. TemplateLiteral
-   *   7. ParenthesizedExpression
-   *
-   * Literal :
-   *    NullLiteral
-   *    BooleanLiteral
-   *    NumericLiteral
-   *    StringLiteral
-   *
-   * ParenthesizedExpression :
-   *   ( AssignmentExpression )
-   *
-   * IsValidAssignmentTarget
-   *   1,3,4,5,6,7 = false
-   *   2 = true
-   */
-  let result: LeftHandSideExpression = undefined as any;
-  primary: switch (state.currentToken) {
-  case Token.ParentScope: // $parent
-    {
-      state.assignable = false;
-      do {
-        nextToken(state);
-        context++; // ancestor
-        if (optional(state, Token.Dot)) {
-          if (state.currentToken === <any>Token.Dot) {
-            error(state);
-          }
-          continue;
-        } else if (state.currentToken & Token.AccessScopeTerminal) {
-          result = new AccessThisExpression(context & Context.Ancestor);
-          context = (context & Context.NeedsPrimary) | Context.This;
-          break primary;
-        } else {
-          error(state);
-        }
-      } while (state.currentToken === Token.ParentScope);
-    }
-  // falls through
-  case Token.Identifier: // identifier
-    {
-      result = new AccessScopeExpression(<string>state.tokenValue, context & Context.Ancestor);
-      nextToken(state);
-      context = (context & Context.NeedsPrimary) | Context.Scope;
-      break;
-    }
-  case Token.ThisScope: // $this
-    state.assignable = false;
-    nextToken(state);
-    result = new AccessThisExpression(0);
-    context = (context & Context.NeedsPrimary) | Context.This;
-    break;
-  case Token.OpenParen: // parenthesized expression
-    nextToken(state);
-    result = parseAssignmentExpression(state, 0, 0) as LeftHandSideExpression;
-    expect(state, Token.CloseParen);
-    break;
-  case Token.OpenBracket:
-    result = parseArrayLiteralExpression(state, 0);
-    state.assignable = false;
-    break;
-  case Token.OpenBrace:
-    result = parseObjectLiteralExpression(state, 0);
-    state.assignable = false;
-    break;
-  case Token.StringLiteral:
-    result = new PrimitiveLiteralExpression(<string>state.tokenValue);
-    state.assignable = false;
-    nextToken(state);
-    break;
-  case Token.TemplateTail:
-    result = new TemplateExpression([<string>state.tokenValue], undefined, undefined, undefined);
-    state.assignable = false;
-    nextToken(state);
-    break;
-  case Token.TemplateContinuation:
-    result = parseTemplateLiteralExpression(state, 0);
-    state.assignable = false;
-    break;
-  case Token.NumericLiteral:
-    {
-      result = new PrimitiveLiteralExpression(<any>state.tokenValue);
-      state.assignable = false;
-      nextToken(state);
-      break;
-    }
-  case Token.NullKeyword:
-  case Token.UndefinedKeyword:
-  case Token.TrueKeyword:
-  case Token.FalseKeyword:
-    result = new PrimitiveLiteralExpression(<any>TokenValues[state.currentToken & Token.TokenMask]);
-    state.assignable = false;
-    nextToken(state);
-    break;
-  default:
-    if (state.index >= state.length) {
-      error(state, 'Unexpected end of expression');
-    } else {
-      error(state);
-    }
-  }
-
-  if (context & Context.NeedsPrimary) {
+  if (minPrecedence === 0) {
     return result;
   }
 
-  /**
-   * parseMemberExpression (Token.Dot, Token.OpenBracket, Token.TemplateContinuation)
-   * MemberExpression :
-   *   1. PrimaryExpression
-   *   2. MemberExpression [ AssignmentExpression ]
-   *   3. MemberExpression . IdentifierName
-   *   4. MemberExpression TemplateLiteral
-   *
-   * IsValidAssignmentTarget
-   *   1,4 = false
-   *   2,3 = true
-   *
-   *
-   * parseCallExpression (Token.OpenParen)
-   * CallExpression :
-   *   1. MemberExpression Arguments
-   *   2. CallExpression Arguments
-   *   3. CallExpression [ AssignmentExpression ]
-   *   4. CallExpression . IdentifierName
-   *   5. CallExpression TemplateLiteral
-   *
-   * IsValidAssignmentTarget
-   *   1,2,5 = false
-   *   3,4 = true
-   */
-  let name = state.tokenValue;
-  while (state.currentToken & Token.MemberOrCallExpression) {
-    switch (state.currentToken) {
-    case Token.Dot:
-      state.assignable = true;
-      nextToken(state);
-      if (!(state.currentToken & Token.IdentifierOrKeyword)) {
-        error(state);
-      }
-      name = state.tokenValue;
-      nextToken(state);
-      // Change $This to $Scope, change $Scope to $Member, keep $Member as-is, change $Keyed to $Member, disregard other flags
-      context = ((context & (Context.This | Context.Scope)) << 1) | (context & Context.Member) | ((context & Context.Keyed) >> 1);
-      if (state.currentToken === <any>Token.OpenParen) {
-        continue;
-      }
-      if (context & Context.Scope) {
-        result = new AccessScopeExpression(<string>name, (<any>result).ancestor);
-      } else { // if it's not $Scope, it's $Member
-        result = new AccessMemberExpression(result, <string>name);
-      }
-      continue;
-    case Token.OpenBracket:
-      state.assignable = true;
-      nextToken(state);
-      context = Context.Keyed;
-      result = new AccessKeyedExpression(result, parseAssignmentExpression(state, 0, 0));
-      expect(state, Token.CloseBracket);
-      break;
-    case Token.OpenParen:
-      state.assignable = false;
-      nextToken(state);
-      const args = [];
-      while (state.currentToken !== <any>Token.CloseParen) {
-        args.push(parseAssignmentExpression(state, 0, 0));
-        if (!optional(state, Token.Comma)) {
-          break;
-        }
-      }
-      expect(state, Token.CloseParen);
-      if (context & Context.Scope) {
-        result = new CallScopeExpression(<string>name, args, (<any>result).ancestor);
-      } else if (context & Context.Member) {
-        result = new CallMemberExpression(result, <string>name, args);
-      } else {
-        result = new CallFunctionExpression(result, args);
-      }
-      context = 0;
-      break;
-    case Token.TemplateTail:
-      state.assignable = false;
-      result = new TemplateExpression([<string>state.tokenValue], [], [state.tokenRaw], result);
-      nextToken(state);
-      break;
-    case Token.TemplateContinuation:
-      state.assignable = false;
-      result = parseTemplateLiteralExpression(state, context | Context.Tagged, <any>result);
-    default:
+  while (optional(state, Token.Bar)) {
+    const name = <string>state.tokenValue;
+    nextToken(state);
+    const args = [];
+    while (optional(state, Token.Colon)) {
+      args.push(parse(state, context, Precedence.Assignment));
     }
+    result = new ValueConverterExpression(result, name, args);
   }
-
-  return <any>result;
-}
-
-/**
- * https://tc39.github.io/ecma262/#prod-ArrayLiteral
- *
- * ArrayLiteral :
- *   [ Elision(opt) ]
- *   [ ElementList ]
- *   [ ElementList, Elision(opt) ]
- *
- * ElementList :
- *   Elision(opt) AssignmentExpression
- *   ElementList, Elision(opt) AssignmentExpression
- *
- * Elision :
- *  ,
- *  Elision ,
- *
- * TODO: above spec is not matched yet
- */
-function parseArrayLiteralExpression(state: ParserState, context: Context): ArrayLiteralExpression {
-  nextToken(state);
-  const elements = [];
-  if (state.currentToken !== <any>Token.CloseBracket) {
-    do {
-      elements.push(parseAssignmentExpression(state, context, 0));
-    } while (optional(state, Token.Comma));
-  }
-  expect(state, Token.CloseBracket);
-  return new ArrayLiteralExpression(elements);
-}
-
-/**
- * https://tc39.github.io/ecma262/#prod-Literal
- *
- * ObjectLiteral :
- *   { }
- *   { PropertyDefinitionList }
- *
- * PropertyDefinitionList :
- *   PropertyDefinition
- *   PropertyDefinitionList, PropertyDefinition
- *
- * PropertyDefinition :
- *   IdentifierName
- *   PropertyName : AssignmentExpression
- *
- * PropertyName :
- *   IdentifierName
- *   StringLiteral
- *   NumericLiteral
- *
- * TODO: above spec is not matched yet
- */
-function parseObjectLiteralExpression(state: ParserState, context: Context): ObjectLiteralExpression {
-  const keys = [];
-  const values = [];
-  nextToken(state);
-  while (state.currentToken !== <any>Token.CloseBrace) {
-    if (state.currentToken & Token.IdentifierOrKeyword) {
-      const { currentChar, index } = state;
-      const currentToken = state.currentToken;
-      keys.push(state.tokenValue);
-      nextToken(state);
-      if (optional(state, Token.Colon)) {
-        values.push(parseAssignmentExpression(state, context, 0));
-      } else {
-        state.currentChar = currentChar;
-        state.currentToken = currentToken;
-        state.index = index;
-        values.push(parseLeftHandSideExpression(state, Context.NeedsPrimary));
-      }
-    } else if (state.currentToken & Token.Literal) {
-      keys.push(state.tokenValue);
-      nextToken(state);
-      expect(state, Token.Colon);
-      values.push(parseAssignmentExpression(state, context, 0));
-    } else {
-      error(state);
+  while (optional(state, Token.Ampersand)) {
+    const name = <string>state.tokenValue;
+    nextToken(state);
+    const args = [];
+    while (optional(state, Token.Colon)) {
+      args.push(parse(state, context, Precedence.Assignment));
     }
-    if (state.currentToken !== <any>Token.CloseBrace) {
-      expect(state, Token.Comma);
-    }
+    result = new BindingBehaviorExpression(result, name, args);
   }
-  expect(state, Token.CloseBrace);
-  return new ObjectLiteralExpression(keys, values);
-}
-
-/**
- * https://tc39.github.io/ecma262/#prod-Literal
- *
- * Template :
- *   NoSubstitutionTemplate
- *   TemplateHead
- *
- * NoSubstitutionTemplate :
- *   ` TemplateCharacters(opt) `
- *
- * TemplateHead :
- *   ` TemplateCharacters(opt) ${
- *
- * TemplateSubstitutionTail :
- *   TemplateMiddle
- *   TemplateTail
- *
- * TemplateMiddle :
- *   } TemplateCharacters(opt) ${
- *
- * TemplateTail :
- *   } TemplateCharacters(opt) `
- *
- * TemplateCharacters :
- *   TemplateCharacter TemplateCharacters(opt)
- *
- * TemplateCharacter :
- *   $ [lookahead ≠ {]
- *   \ EscapeSequence
- *   SourceCharacter (but not one of ` or \ or $)
- */
-function parseTemplateLiteralExpression(state: ParserState, context: Context, tag?: any): TemplateExpression {
-  const cooked: Array<string> = [<string>state.tokenValue];
-  const raw: string[] = context & Context.Tagged ? [state.tokenRaw] : undefined as any;
-  expect(state, Token.TemplateContinuation);
-  const expressions = [parseAssignmentExpression(state, context, 0)];
-
-  while ((state.currentToken = scanTemplateTail(state)) !== Token.TemplateTail) {
-    cooked.push(<string>state.tokenValue);
-    if (context & Context.Tagged) {
-      raw.push(state.tokenRaw);
-    }
-    expect(state, Token.TemplateContinuation);
-    expressions.push(parseAssignmentExpression(state, context, 0));
+  if (state.currentToken !== Token.EOF) {
+    error(state, `Unconsumed token ${state.tokenRaw}`);
   }
-
-  cooked.push(<string>state.tokenValue);
-  if (context & Context.Tagged) {
-    raw.push(state.tokenRaw);
-  }
-  nextToken(state);
-  return new TemplateExpression(cooked, expressions, raw, tag);
+  return result;
 }
 
 function nextToken(state: ParserState): void {
@@ -769,23 +791,20 @@ const enum Context {
   Scope         = 0b00000000000000000000100000000000, //1 << 11,
   Member        = 0b00000000000000000001000000000000, //1 << 12,
   Keyed         = 0b00000000000000000010000000000000, //1 << 13,
-  Tagged        = 0b00000000000000000100000000000000, //1 << 14,
-  NeedsPrimary  = 0b00000000000000001000000000000000, //1 << 15,
   // Performing a bitwise and (&) with this value (511) will return only the ancestor bit (is this limit high enough?)
   Ancestor      = 0b00000000000000000000000111111111 //(1 << 9) - 1
 }
 
 const enum Precedence {
-  /* Shifting 6 bits to the left gives us a step size of 64 in a range of
-   * 64 (1 << 6) to 448 (7 << 6) for our precedence bit
-   * This is the lowest value which does not overlap with the token bits 0-38. */
-  Mask                                      = 0b00000000000000000000000000000110, //6,
-
+  Variadic                                  = -0b00000000000000000000000000000001, // -1,
+  Assignment                                 = 0b00000000000000000000000000000000, // 0,
   /* Performing a bitwise and (&) with this value will return only the
-   * precedence bit, which is used to determine the parsing order of binary
+   * Binary precedence bit, which is used to determine the parsing order of binary
    * expressions */
-  Binary                                     = 0b00000000000000000000000111000000, //7 << Mask,
-  Unary                                      = 0b00000000000000000000001000000000, //8 << Mask,
+  Binary                                     = 0b00000000000000000000000111000000, // 7 << 6,
+  LeftHandSide                               = 0b00000000000000000000001000000000, // 1 << 9
+  Primary                                    = 0b00000000000000000000010000000000, // 2 << 9
+  Unary                                      = 0b00000000000000000000011000000000, // 3 << 9
 }
 
 // Tokens
@@ -795,7 +814,6 @@ const enum Token {
    * token bit, which corresponds to the index of the token's value in the
    * TokenValues array */
   TokenMask                                  = 0b00000000000000000000000000111111, //(1 << 6) - 1,
-
 
   // The tokens must start at 1 << 11 to avoid conflict with Precedence (1 << 10 === 16 << 6)
   // and can go up to 1 << 30 (1 << 31 rolls over to negative)
@@ -845,25 +863,25 @@ const enum Token {
   // Operator precedence: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Operator_Precedence#Table
   /** '&' */         Ampersand               = 0b00000000000000000100000000010011, //19 | AccessScopeTerminal,
   /** '|' */         Bar                     = 0b00000000000000000100000000010100, //20 | AccessScopeTerminal,
-  /** '||' */        BarBar                  = 0b00000000001000000000000010010101, //21 /* 5*/ |  2 << Precedence.Mask | BinaryOp,
-  /** '&&' */        AmpersandAmpersand      = 0b00000000001000000000000011010110, //22 /* 6*/ |  3 << Precedence.Mask | BinaryOp,
-  /** '==' */        EqualsEquals            = 0b00000000001000000000000100010111, //23 /*10*/ |  4 << Precedence.Mask | BinaryOp,
-  /** '!=' */        ExclamationEquals       = 0b00000000001000000000000100011000, //24 /*10*/ |  4 << Precedence.Mask | BinaryOp,
-  /** '===' */       EqualsEqualsEquals      = 0b00000000001000000000000100011001, //25 /*10*/ |  4 << Precedence.Mask | BinaryOp,
-  /** '!== '*/       ExclamationEqualsEquals = 0b00000000001000000000000100011010, //26 /*10*/ |  4 << Precedence.Mask | BinaryOp,
-  /** '<' */         LessThan                = 0b00000000001000000000000101011011, //27 /*11*/ |  5 << Precedence.Mask | BinaryOp,
-  /** '>' */         GreaterThan             = 0b00000000001000000000000101011100, //28 /*11*/ |  5 << Precedence.Mask | BinaryOp,
-  /** '<=' */        LessThanEquals          = 0b00000000001000000000000101011101, //29 /*11*/ |  5 << Precedence.Mask | BinaryOp,
-  /** '>=' */        GreaterThanEquals       = 0b00000000001000000000000101011110, //30 /*11*/ |  5 << Precedence.Mask | BinaryOp,
-  /** 'in' */        InKeyword               = 0b00000000001000001000000101011111, //31 /*11*/ |  5 << Precedence.Mask | BinaryOp | Keyword,
-  /** 'instanceof' */InstanceOfKeyword       = 0b00000000001000001000000101100000, //32 /*11*/ |  5 << Precedence.Mask | BinaryOp | Keyword,
-  /** '+' */         Plus                    = 0b00000000011000000000000110100001, //33 /*13*/ |  6 << Precedence.Mask | BinaryOp | UnaryOp,
-  /** '-' */         Minus                   = 0b00000000011000000000000110100010, //34 /*13*/ |  6 << Precedence.Mask | BinaryOp | UnaryOp,
+  /** '||' */        BarBar                  = 0b00000000001000000000000010010101, //21 /* 5*/ |  2 << 6 | BinaryOp,
+  /** '&&' */        AmpersandAmpersand      = 0b00000000001000000000000011010110, //22 /* 6*/ |  3 << 6 | BinaryOp,
+  /** '==' */        EqualsEquals            = 0b00000000001000000000000100010111, //23 /*10*/ |  4 << 6 | BinaryOp,
+  /** '!=' */        ExclamationEquals       = 0b00000000001000000000000100011000, //24 /*10*/ |  4 << 6 | BinaryOp,
+  /** '===' */       EqualsEqualsEquals      = 0b00000000001000000000000100011001, //25 /*10*/ |  4 << 6 | BinaryOp,
+  /** '!== '*/       ExclamationEqualsEquals = 0b00000000001000000000000100011010, //26 /*10*/ |  4 << 6 | BinaryOp,
+  /** '<' */         LessThan                = 0b00000000001000000000000101011011, //27 /*11*/ |  5 << 6 | BinaryOp,
+  /** '>' */         GreaterThan             = 0b00000000001000000000000101011100, //28 /*11*/ |  5 << 6 | BinaryOp,
+  /** '<=' */        LessThanEquals          = 0b00000000001000000000000101011101, //29 /*11*/ |  5 << 6 | BinaryOp,
+  /** '>=' */        GreaterThanEquals       = 0b00000000001000000000000101011110, //30 /*11*/ |  5 << 6 | BinaryOp,
+  /** 'in' */        InKeyword               = 0b00000000001000001000000101011111, //31 /*11*/ |  5 << 6 | BinaryOp | Keyword,
+  /** 'instanceof' */InstanceOfKeyword       = 0b00000000001000001000000101100000, //32 /*11*/ |  5 << 6 | BinaryOp | Keyword,
+  /** '+' */         Plus                    = 0b00000000011000000000000110100001, //33 /*13*/ |  6 << 6 | BinaryOp | UnaryOp,
+  /** '-' */         Minus                   = 0b00000000011000000000000110100010, //34 /*13*/ |  6 << 6 | BinaryOp | UnaryOp,
   /** 'typeof' */    TypeofKeyword           = 0b00000000010000001000000000100011, //35 /*16*/ | UnaryOp | Keyword,
   /** 'void' */      VoidKeyword             = 0b00000000010000001000000000100100, //36 /*16*/ | UnaryOp | Keyword,
-  /** '*' */         Asterisk                = 0b00000000001000000000000111100101, //37 /*14*/ |  7 << Precedence.Mask | BinaryOp,
-  /** '%' */         Percent                 = 0b00000000001000000000000111100110, //38 /*14*/ |  7 << Precedence.Mask | BinaryOp,
-  /** '/' */         Slash                   = 0b00000000001000000000000111100111, //39 /*14*/ |  7 << Precedence.Mask | BinaryOp,
+  /** '*' */         Asterisk                = 0b00000000001000000000000111100101, //37 /*14*/ |  7 << 6 | BinaryOp,
+  /** '%' */         Percent                 = 0b00000000001000000000000111100110, //38 /*14*/ |  7 << 6 | BinaryOp,
+  /** '/' */         Slash                   = 0b00000000001000000000000111100111, //39 /*14*/ |  7 << 6 | BinaryOp,
   /** '=' */         Equals                  = 0b00000000000000000000000000101000, //40,
   /** '!' */         Exclamation             = 0b00000000010000000000000000101001, //41 | UnaryOp
 }
