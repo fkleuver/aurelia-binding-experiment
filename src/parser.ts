@@ -760,99 +760,99 @@ function unescape(code: number): number {
 }
 
 const enum Access {
-  Reset                   = 0b000000000000000000000000000, // 0
-  Ancestor                = 0b000000000000000000111111111, // This - 1
-  This                    = 0b000000000000000001000000000, // 1 <<  9
-  Scope                   = 0b000000000000000010000000000, // 1 << 10
-  Member                  = 0b000000000000000100000000000, // 1 << 11
-  Keyed                   = 0b000000000000001000000000000  // 1 << 12
+  Reset                   = 0b00000000000000000000000, // 0
+  Ancestor                = 0b00000000000000111111111, // This - 1
+  This                    = 0b00000000000001000000000, // 1 <<  9
+  Scope                   = 0b00000000000010000000000, // 1 << 10
+  Member                  = 0b00000000000100000000000, // 1 << 11
+  Keyed                   = 0b00000000001000000000000  // 1 << 12
 }
 const enum Precedence {
-  //                                            |
-  Variadic                = 0b000000000000000000000111101, // LogicalOR - 3
-  Assignment              = 0b000000000000000000000111110, // LogicalOR - 2
-  Conditional             = 0b000000000000000000000111111, // LogicalOR - 1
-  LogicalOR               = 0b000000000000000000001000000, // 1 << 6
-  LogicalAND              = 0b000000000000000000010000000, // 2 << 6
-  Equality                = 0b000000000000000000011000000, // 3 << 6
-  Relational              = 0b000000000000000000100000000, // 4 << 6
-  Additive                = 0b000000000000000000101000000, // 5 << 6
-  Multiplicative          = 0b000000000000000000110000000, // 6 << 6
-  Binary                  = 0b000000000000000000111000000, // 7 << 6
-  CallOrMember            = 0b000000000000000000111000000, // Binary + 1
-  Primary                 = 0b000000000000000000111000001, // Binary + 2
-  Unary                   = 0b000000000000000000111000010, // Binary + 3
-  //                                            |
+  //                                        |
+  Variadic                = 0b00000000000000000111101, // LogicalOR - 3
+  Assignment              = 0b00000000000000000111110, // LogicalOR - 2
+  Conditional             = 0b00000000000000000111111, // LogicalOR - 1
+  LogicalOR               = 0b00000000000000001000000, // 1 << 6
+  LogicalAND              = 0b00000000000000010000000, // 2 << 6
+  Equality                = 0b00000000000000011000000, // 3 << 6
+  Relational              = 0b00000000000000100000000, // 4 << 6
+  Additive                = 0b00000000000000101000000, // 5 << 6
+  Multiplicative          = 0b00000000000000110000000, // 6 << 6
+  Binary                  = 0b00000000000000111000000, // 7 << 6
+  CallOrMember            = 0b00000000000000111000000, // Binary + 1
+  Primary                 = 0b00000000000000111000001, // Binary + 2
+  Unary                   = 0b00000000000000111000010, // Binary + 3
+  //                                        |
 }
 const enum Token {
-  //                                            |
-  ExpressionTerminal      = 0b000000000000000100000000000, // 1 << 11,
-  AccessScopeTerminal     = 0b000000000000100000000000000, // 1 << 14,
-  EOF                     = 0b000000000000100100000000000, // AccessScopeTerminal | ExpressionTerminal,
-  ClosingToken            = 0b000000000000001000000000000, // 1 << 12,
-  OpeningToken            = 0b000000000000010000000000000, // 1 << 13,
-  Keyword                 = 0b000000000001000000000000000, // 1 << 15,
-  Identifier              = 0b000000000010000000000000000, // 1 << 16,
-  IdentifierName          = 0b000000000011000000000000000, // Identifier | Keyword,
-  NumericLiteral          = 0b000000000100000000000000000, // 1 << 17,
-  StringLiteral           = 0b000000001000000000000000000, // 1 << 18,
-  Literal                 = 0b000000001100000000000000000, // NumericLiteral | StringLiteral,
-  PropertyName            = 0b000000001111000000000000000, // IdentifierName | Literal,
-  BinaryOp                = 0b000001000000000000000000000, // 1 << 21,
-  UnaryOp                 = 0b000010000000000000000000000, // 1 << 22,
-  LeftHandSide            = 0b001000000000000000000000000, // 1 << 24,
-  TemplateTail            = 0b011000000000000000000000000, // 1 << 25 | LeftHandSide,
-  TemplateContinuation    = 0b101000000000000000000000000, // 1 << 26 | LeftHandSide,
-  FalseKeyword            = 0b000000000001000000000000000, // 0 | Keyword,
-  //                                            |
-  Precedence              = 0b000000000000000000111000000,
-  //                                            |
-  Type                    = 0b000000000000000000000111111,
-  //                                            |  |
-  TrueKeyword             = 0b000000000001000000000000001, //  1 |                Keyword,
-  NullKeyword             = 0b000000000001000000000000010, //  2 |                Keyword,
-  UndefinedKeyword        = 0b000000000001000000000000011, //  3 |                Keyword,
-  ThisScope               = 0b000000000011000000000000100, //  4 |                IdentifierName,
-  ParentScope             = 0b000000000011000000000000101, //  5 |                IdentifierName,
-  OpenParen               = 0b001000000000110000000000110, //  6 | LeftHandSide | OpeningToken | AccessScopeTerminal,
-  OpenBrace               = 0b000000000000010000000000111, //  7 |                OpeningToken,
-  Dot                     = 0b001000000000000000000001000, //  8 | LeftHandSide,
-  //                                            |  |
-  CloseBrace              = 0b000000000000101100000001001, //  9 |                AccessScopeTerminal | ClosingToken | ExpressionTerminal,
-  CloseParen              = 0b000000000000101100000001010, // 10 |                AccessScopeTerminal | ClosingToken | ExpressionTerminal,
-  Semicolon               = 0b000000000000000100000001011, // 11 |                ExpressionTerminal,
-  Comma                   = 0b000000000000100000000001100, // 12 |                AccessScopeTerminal,
-  OpenBracket             = 0b001000000000110000000001101, // 13 | LeftHandSide | OpeningToken | AccessScopeTerminal,
-  CloseBracket            = 0b000000000000001100000001110, // 14 |                ClosingToken | ExpressionTerminal,
-  Colon                   = 0b000000000000100000000001111, // 15 |                AccessScopeTerminal,
-  Question                = 0b000000000000000000000010000, // 16,
-  //                                            |  |
-  Ampersand               = 0b000000000000100000000010011, // 19 |                AccessScopeTerminal,
-  Bar                     = 0b000000000000100000000010100, // 20 |                AccessScopeTerminal,
-  BarBar                  = 0b000001000000000000010010101, // 21 |                Precedence.LogicalOR  | BinaryOp,
-  AmpersandAmpersand      = 0b000001000000000000011010110, // 22 |                Precedence.LogicalAND | BinaryOp,
-  EqualsEquals            = 0b000001000000000000100010111, // 23 |                Precedence.Equality   | BinaryOp,
-  ExclamationEquals       = 0b000001000000000000100011000, // 24 |                Precedence.Equality   | BinaryOp,
-  EqualsEqualsEquals      = 0b000001000000000000100011001, // 25 |                Precedence.Equality   | BinaryOp,
-  ExclamationEqualsEquals = 0b000001000000000000100011010, // 26 |                Precedence.Equality   | BinaryOp,
-  //                                            |  |
-  LessThan                = 0b000001000000000000101011011, // 27 |                Precedence.Relational | BinaryOp,
-  GreaterThan             = 0b000001000000000000101011100, // 28 |                Precedence.Relational | BinaryOp,
-  LessThanEquals          = 0b000001000000000000101011101, // 29 |                Precedence.Relational | BinaryOp,
-  GreaterThanEquals       = 0b000001000000000000101011110, // 30 |                Precedence.Relational | BinaryOp,
-  InKeyword               = 0b000001000001000000101011111, // 31 |                Precedence.Relational | BinaryOp | Keyword,
-  InstanceOfKeyword       = 0b000001000001000000101100000, // 32 |                Precedence.Relational | BinaryOp | Keyword,
-  Plus                    = 0b000011000000000000110100001, // 33 |                Precedence.Additive   | BinaryOp | UnaryOp,
-  Minus                   = 0b000011000000000000110100010, // 34 |                Precedence.Additive   | BinaryOp | UnaryOp,
-  //                                            |  |
-  TypeofKeyword           = 0b000010000001000000000100011, // 35 |                UnaryOp | Keyword,
-  VoidKeyword             = 0b000010000001000000000100100, // 36 |                UnaryOp | Keyword,
-  Asterisk                = 0b000001000000000000111100101, // 37 |                Precedence.Multiplicative | BinaryOp,
-  Percent                 = 0b000001000000000000111100110, // 38 |                Precedence.Multiplicative | BinaryOp,
-  Slash                   = 0b000001000000000000111100111, // 39 |                Precedence.Multiplicative | BinaryOp,
-  Equals                  = 0b000000000000000000000101000, // 40,
-  Exclamation             = 0b000010000000000000000101001, // 41 |                UnaryOp
-  //                                            |  |
+  //                                        |
+  ExpressionTerminal      = 0b00000000000100000000000, // 1 << 11,
+  AccessScopeTerminal     = 0b00000000100000000000000, // 1 << 14,
+  EOF                     = 0b00000000100100000000000, // AccessScopeTerminal | ExpressionTerminal,
+  ClosingToken            = 0b00000000001000000000000, // 1 << 12,
+  OpeningToken            = 0b00000000010000000000000, // 1 << 13,
+  Keyword                 = 0b00000001000000000000000, // 1 << 15,
+  Identifier              = 0b00000010000000000000000, // 1 << 16,
+  IdentifierName          = 0b00000011000000000000000, // Identifier | Keyword,
+  NumericLiteral          = 0b00000100000000000000000, // 1 << 17,
+  StringLiteral           = 0b00001000000000000000000, // 1 << 18,
+  Literal                 = 0b00001100000000000000000, // NumericLiteral | StringLiteral,
+  PropertyName            = 0b00001111000000000000000, // IdentifierName | Literal,
+  LeftHandSide            = 0b00010000000000000000000, // 1 << 19,
+  BinaryOp                = 0b01000000000000000000000, // 1 << 21,
+  UnaryOp                 = 0b10000000000000000000000, // 1 << 22,
+  //                                        |
+  Precedence              = 0b00000000000000111000000,
+  //                                        |
+  Type                    = 0b00000000000000000111111,
+  //                                        |  |
+  FalseKeyword            = 0b00000001000000000000000, //  0 |                      Keyword
+  TrueKeyword             = 0b00000001000000000000001, //  1 |                      Keyword
+  NullKeyword             = 0b00000001000000000000010, //  2 |                      Keyword
+  UndefinedKeyword        = 0b00000001000000000000011, //  3 |                      Keyword
+  ThisScope               = 0b00000011000000000000100, //  4 |                      IdentifierName
+  ParentScope             = 0b00000011000000000000101, //  5 |                      IdentifierName
+  OpenParen               = 0b00010000110000000000110, //  6 |                      LeftHandSide | OpeningToken | AccessScopeTerminal
+  OpenBrace               = 0b00000000010000000000111, //  7 |                                     OpeningToken
+  Dot                     = 0b00010000000000000001000, //  8 |                      LeftHandSide,
+  //                                        |  |
+  CloseBrace              = 0b00000000101100000001001, //  9 |                                     ClosingToken | AccessScopeTerminal | ExpressionTerminal
+  CloseParen              = 0b00000000101100000001010, // 10 |                                     ClosingToken | AccessScopeTerminal | ExpressionTerminal
+  Semicolon               = 0b00000000000100000001011, // 11 |                                                                          ExpressionTerminal
+  Comma                   = 0b00000000100000000001100, // 12 |                                     AccessScopeTerminal
+  OpenBracket             = 0b00010000110000000001101, // 13 |                      LeftHandSide | OpeningToken | AccessScopeTerminal
+  CloseBracket            = 0b00000000001100000001110, // 14 |                                     ClosingToken |                       ExpressionTerminal
+  Colon                   = 0b00000000100000000001111, // 15 |                                     AccessScopeTerminal,
+  Question                = 0b00000000000000000010000, // 16,
+  //                                        |  |
+  Ampersand               = 0b00000000100000000010011, // 19 |                                     AccessScopeTerminal
+  Bar                     = 0b00000000100000000010100, // 20 |                                     AccessScopeTerminal
+  BarBar                  = 0b01000000000000010010101, // 21 |           BinaryOp |                Precedence.LogicalOR
+  AmpersandAmpersand      = 0b01000000000000011010110, // 22 |           BinaryOp |                Precedence.LogicalAND
+  EqualsEquals            = 0b01000000000000100010111, // 23 |           BinaryOp |                Precedence.Equality
+  ExclamationEquals       = 0b01000000000000100011000, // 24 |           BinaryOp |                Precedence.Equality
+  EqualsEqualsEquals      = 0b01000000000000100011001, // 25 |           BinaryOp |                Precedence.Equality
+  ExclamationEqualsEquals = 0b01000000000000100011010, // 26 |           BinaryOp |                Precedence.Equality
+  //                                        |  |
+  LessThan                = 0b01000000000000101011011, // 27 |           BinaryOp |                Precedence.Relational
+  GreaterThan             = 0b01000000000000101011100, // 28 |           BinaryOp |                Precedence.Relational
+  LessThanEquals          = 0b01000000000000101011101, // 29 |           BinaryOp |                Precedence.Relational
+  GreaterThanEquals       = 0b01000000000000101011110, // 30 |           BinaryOp |                Precedence.Relational
+  InKeyword               = 0b01000001000000101011111, // 31 |           BinaryOp | Keyword |      Precedence.Relational
+  InstanceOfKeyword       = 0b01000001000000101100000, // 32 |           BinaryOp | Keyword |      Precedence.Relational
+  Plus                    = 0b11000000000000110100001, // 33 | UnaryOp | BinaryOp |                Precedence.Additive
+  Minus                   = 0b11000000000000110100010, // 34 | UnaryOp | BinaryOp |                Precedence.Additive
+  //                                        |  |
+  TypeofKeyword           = 0b10000001000000000100011, // 35 | UnaryOp |            Keyword
+  VoidKeyword             = 0b10000001000000000100100, // 36 | UnaryOp |            Keyword
+  Asterisk                = 0b01000000000000111100101, // 37 |           BinaryOp |                Precedence.Multiplicative
+  Percent                 = 0b01000000000000111100110, // 38 |           BinaryOp |                Precedence.Multiplicative
+  Slash                   = 0b01000000000000111100111, // 39 |           BinaryOp |                Precedence.Multiplicative
+  Equals                  = 0b00000000000000000101000, // 40
+  Exclamation             = 0b10000000000000000101001, // 41 | UnaryOp
+  TemplateTail            = 0b00010000000000000101010, // 42 |                      LeftHandSide
+  TemplateContinuation    = 0b00010000000000000101011, // 43 |                      LeftHandSide
+  //                                        |  |
 }
 
 const enum Char {
@@ -986,7 +986,8 @@ const TokenValues = [
   '(', '{', '.', '}', ')', ';', ',', '[', ']', ':', '?', '\'', '"',
 
   '&', '|', '||', '&&', '==', '!=', '===', '!==', '<', '>',
-  '<=', '>=', 'in', 'instanceof', '+', '-', 'typeof', 'void', '*', '%', '/', '=', '!'
+  '<=', '>=', 'in', 'instanceof', '+', '-', 'typeof', 'void', '*', '%', '/', '=', '!',
+  Token.TemplateTail, Token.TemplateContinuation
 ];
 
 /**
