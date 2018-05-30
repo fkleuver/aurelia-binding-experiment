@@ -118,9 +118,9 @@ describe('Parser', () => {
         { expr: '-1', expected: new UnaryExpression('-', $num1) },
         { expr: '(-1)', expected: new UnaryExpression('-', $num1) },
         { expr: '-(-1)', expected: new UnaryExpression('-', new UnaryExpression('-', $num1)) },
-        { expr: '+(-1)', expected: new UnaryExpression('-', $num1) },
-        { expr: '-(+1)', expected: new UnaryExpression('-', $num1) },
-        { expr: '+(+1)', expected: $num1 },
+        { expr: '+(-1)', expected: new UnaryExpression('+', new UnaryExpression('-', $num1)) },
+        { expr: '-(+1)', expected: new UnaryExpression('-', new UnaryExpression('+', $num1)) },
+        { expr: '+(+1)', expected: new UnaryExpression('+', new UnaryExpression('+', $num1)) },
         { expr: '9007199254740992', expected: new PrimitiveLiteralExpression(9007199254740992) }, // Number.MAX_SAFE_INTEGER + 1
         { expr: '1.7976931348623157e+308', expected: new PrimitiveLiteralExpression(1.7976931348623157e+308) }, // Number.MAX_VALUE
         { expr: '1.7976931348623157E+308', expected: new PrimitiveLiteralExpression(1.7976931348623157e+308) }, // Number.MAX_VALUE
@@ -257,7 +257,7 @@ describe('Parser', () => {
     describe('Binary + Unary operator precedence', () => {
       const x = $x;
       const y = $y;
-      const u = (op: any, r: any) => op === '!' ? new UnaryExpression(op, r) : new UnaryExpression(op, r);
+      const u = (op: any, r: any) => new UnaryExpression(op, r);
       const b = (l: any, op: any, r: any) => new BinaryExpression(op, l, r);
 
       for (const _b of binaryOps) {
@@ -394,11 +394,6 @@ describe('Parser', () => {
 
     it('Assign', () => {
       const expr = parser.parse('foo = bar');
-      verifyEqual(expr, new AssignmentExpression($foo, $bar));
-    });
-
-    it('Assign to ignored Unary', () => {
-      const expr = parser.parse('+foo = bar');
       verifyEqual(expr, new AssignmentExpression($foo, $bar));
     });
 
@@ -600,6 +595,10 @@ describe('Parser', () => {
   });
 
   describe('should not parse', () => {
+    it('Assign to Unary plus', () => {
+      _verifyError('+foo = bar', 'not assignable');
+    });
+
     describe('LiteralObject with computed property', () => {
       const expressions = [
         '{ []: "foo" }',

@@ -53,7 +53,7 @@ function parseVariadicExpression(state: ParserState, context: Context): IsBindin
   if (state.currentToken & Token.ExpressionTerminal) {
     error(state, 'Invalid start of expression');
   }
-  let result = parseAssignmentExpression(state, context) as IsBindingBehaviorExpression;
+  let result = parseAssignmentExpression(state, context, 0) as IsBindingBehaviorExpression;
   while (optional(state, Token.Bar)) {
     result = new ValueConverterExpression(result as IsValueConverterExpression, <string>state.tokenValue, parseVariadicArguments(state, context));
   }
@@ -70,146 +70,127 @@ function parseVariadicArguments(state: ParserState, context: Context): Array<IsA
   nextToken(state);
   const result = [];
   while (optional(state, Token.Colon)) {
-    result.push(parseAssignmentExpression(state, context));
+    result.push(parseAssignmentExpression(state, context, 0));
   }
   return result;
 }
 
-/**
- * https://tc39.github.io/ecma262/#prod-AssignmentExpression
- * Note: AssignmentExpression here is equivalent to ES Expression because we don't parse the comma operator
- *
- * AssignmentExpression :
- *   1. ConditionalExpression
- *   2. LeftHandSideExpression = AssignmentExpression
- *
- * IsValidAssignmentTarget
- *   1,2 = false
- */
-function parseAssignmentExpression(state: ParserState, context: Context): IsAssignmentExpression {
+function parseAssignmentExpression(state: ParserState, context: Context, minPrecedence: number): IsAssignmentExpression {
   let exprStart = state.index;
-  state.assignable = true;
-  const conditional = parseConditionalExpression(state, context);
-  let assignment = conditional as IsAssignmentExpression;
+  state.assignable = minPrecedence === 0;
+  /**
+   * parseUnaryExpression
+   * https://tc39.github.io/ecma262/#sec-unary-operators
+   *
+   * UnaryExpression :
+   *   1. LeftHandSideExpression
+   *   2. void UnaryExpression
+   *   3. typeof UnaryExpression
+   *   4. + UnaryExpression
+   *   5. - UnaryExpression
+   *   6. ! UnaryExpression
+   *
+   * IsValidAssignmentTarget
+   *   2,3,4,5,6 = false
+   *   1 = see parseLeftHandSideExpression
+   *
+   * Note: technically we should throw on ++ / -- / +++ / ---, but there's nothing to gain from that
+   */
+  let result: IsAssignmentExpression;
+  if (state.currentToken & Token.UnaryOp) {
+    const op = TokenValues[state.currentToken & Token.TokenMask];
+    nextToken(state);
+    result = new UnaryExpression(<any>op, parseAssignmentExpression(state, context, Precedence.Unary) as LeftHandSideExpression);
+  } else {
+    result = parseLeftHandSideExpression(state, context);
+  }
+  if (minPrecedence > Precedence.Binary) {
+    return result;
+  }
 
+  /**
+   * parseBinaryExpression
+   * https://tc39.github.io/ecma262/#sec-multiplicative-operators
+   *
+   * MultiplicativeExpression : (local precedence 6)
+   *   UnaryExpression
+   *   MultiplicativeExpression * / % UnaryExpression
+   *
+   * AdditiveExpression : (local precedence 5)
+   *   MultiplicativeExpression
+   *   AdditiveExpression + - MultiplicativeExpression
+   *
+   * RelationalExpression : (local precedence 4)
+   *   AdditiveExpression
+   *   RelationalExpression < > <= >= instanceof in AdditiveExpression
+   *
+   * EqualityExpression : (local precedence 3)
+   *   RelationalExpression
+   *   EqualityExpression == != === !== RelationalExpression
+   *
+   * LogicalANDExpression : (local precedence 2)
+   *   EqualityExpression
+   *   LogicalANDExpression && EqualityExpression
+   *
+   * LogicalORExpression : (local precedence 1)
+   *   LogicalANDExpression
+   *   LogicalORExpression || LogicalANDExpression
+   */
+  while (state.currentToken & Token.BinaryOp) {
+    const opToken = state.currentToken;
+    if ((opToken & Precedence.Binary) < minPrecedence) {
+      break;
+    }
+    nextToken(state);
+    result = new BinaryExpression(<string>TokenValues[opToken & Token.TokenMask], result as IsBinaryExpression, parseAssignmentExpression(state, context, opToken & Precedence.Binary) as IsBinaryExpression);
+  }
+  if (minPrecedence > 0) {
+    return result;
+  }
+
+  /**
+   * parseConditionalExpression
+   * https://tc39.github.io/ecma262/#prod-ConditionalExpression
+   *
+   * ConditionalExpression :
+   *   1. BinaryExpression
+   *   2. BinaryExpression ? AssignmentExpression : AssignmentExpression
+   *
+   * IsValidAssignmentTarget
+   *   1,2 = false
+   */
+  if (optional(state, Token.Question)) {
+    const yes = parseAssignmentExpression(state, context, 0);
+    expect(state, Token.Colon);
+    result = new ConditionalExpression(result, yes, parseAssignmentExpression(state, context, 0));
+    state.assignable = false;
+  }
+  if (minPrecedence > 0) {
+    return result;
+  }
+
+  /**
+   * parseAssignmentExpression
+   * https://tc39.github.io/ecma262/#prod-AssignmentExpression
+   * Note: AssignmentExpression here is equivalent to ES Expression because we don't parse the comma operator
+   *
+   * AssignmentExpression :
+   *   1. ConditionalExpression
+   *   2. LeftHandSideExpression = AssignmentExpression
+   *
+   * IsValidAssignmentTarget
+   *   1,2 = false
+   */
   if (state.currentToken === Token.Equals) {
     if (!state.assignable) {
       error(state, `Expression ${state.input.slice(exprStart, state.startIndex)} is not assignable`);
     }
     nextToken(state);
     exprStart = state.index;
-    assignment = new AssignmentExpression(conditional as AssignableExpression, parseAssignmentExpression(state, context));
+    result = new AssignmentExpression(result as AssignableExpression, parseAssignmentExpression(state, context, 0));
   }
-  return assignment;
-}
 
-/**
- * https://tc39.github.io/ecma262/#prod-ConditionalExpression
- *
- * ConditionalExpression :
- *   1. BinaryExpression
- *   2. BinaryExpression ? AssignmentExpression : AssignmentExpression
- *
- * IsValidAssignmentTarget
- *   1,2 = false
- */
-function parseConditionalExpression(state: ParserState, context: Context): IsConditionalExpression {
-  const binary = parseBinaryExpression(state, context, 0);
-  let conditional = binary as IsConditionalExpression;
-
-  if (optional(state, Token.Question)) {
-    const yes = parseAssignmentExpression(state, context);
-    expect(state, Token.Colon);
-    conditional = new ConditionalExpression(binary, yes, parseAssignmentExpression(state, context));
-    state.assignable = false;
-  }
-  return conditional;
-}
-
-/**
- * https://tc39.github.io/ecma262/#sec-multiplicative-operators
- *
- * MultiplicativeExpression : (local precedence 6)
- *   UnaryExpression
- *   MultiplicativeExpression * UnaryExpression
- *   MultiplicativeExpression / UnaryExpression
- *   MultiplicativeExpression % UnaryExpression
- *
- * AdditiveExpression : (local precedence 5)
- *   MultiplicativeExpression
- *   AdditiveExpression + MultiplicativeExpression
- *   AdditiveExpression - MultiplicativeExpression
- *
- * RelationalExpression : (local precedence 4)
- *   AdditiveExpression
- *   RelationalExpression < AdditiveExpression
- *   RelationalExpression > AdditiveExpression
- *   RelationalExpression <= AdditiveExpression
- *   RelationalExpression >= AdditiveExpression
- *   RelationalExpression instanceof AdditiveExpression
- *   RelationalExpression in AdditiveExpression
- *
- * EqualityExpression : (local precedence 3)
- *   RelationalExpression
- *   EqualityExpression == RelationalExpression
- *   EqualityExpression != RelationalExpression
- *   EqualityExpression === RelationalExpression
- *   EqualityExpression !== RelationalExpression
- *
- * LogicalANDExpression : (local precedence 2)
- *   EqualityExpression
- *   LogicalANDExpression && EqualityExpression
- *
- * LogicalORExpression : (local precedence 1)
- *   LogicalANDExpression
- *   LogicalORExpression || LogicalANDExpression
- */
-function parseBinaryExpression(state: ParserState, context: Context, minPrecedence: number): IsBinaryExpression {
-  let left = parseUnaryExpression(state, context) as IsBinaryExpression;
-
-  while (state.currentToken & Token.BinaryOp) {
-    const opToken = state.currentToken;
-    if ((opToken & Token.Precedence) < minPrecedence) {
-      break;
-    }
-    nextToken(state);
-    left = new BinaryExpression(<string>TokenValues[opToken & Token.TokenMask], left, parseBinaryExpression(state, context, opToken & Token.Precedence));
-    state.assignable = false;
-  }
-  return left;
-}
-
-/**
- * https://tc39.github.io/ecma262/#sec-unary-operators
- *
- * UnaryExpression :
- *   1. LeftHandSideExpression
- *   2. void UnaryExpression
- *   3. typeof UnaryExpression
- *   4. + UnaryExpression
- *   5. - UnaryExpression
- *   6. ! UnaryExpression
- *
- * IsValidAssignmentTarget
- *   2,3,4,5,6 = false
- *   1 = see parseLeftHandSideExpression
- */
-function parseUnaryExpression(state: ParserState, context: Context): IsUnaryExpression {
-  switch (state.currentToken) {
-    case Token.Plus:
-      nextToken(state);
-      return parseUnaryExpression(state, 0);
-    case Token.VoidKeyword:
-    case Token.TypeofKeyword:
-    case Token.Minus:
-    case Token.Exclamation:
-      state.assignable = false;
-      const op = TokenValues[state.currentToken & Token.TokenMask];
-      nextToken(state);
-      return new UnaryExpression(<any>op, parseUnaryExpression(state, 0));
-    default:
-      return parseLeftHandSideExpression(state, 0);
-  }
+  return result;
 }
 
 /**
@@ -284,7 +265,7 @@ function parseLeftHandSideExpression(state: ParserState, context: Context): Left
     break;
   case Token.OpenParen: // parenthesized expression
     nextToken(state);
-    result = parseAssignmentExpression(state, 0) as LeftHandSideExpression;
+    result = parseAssignmentExpression(state, 0, 0) as LeftHandSideExpression;
     expect(state, Token.CloseParen);
     break;
   case Token.OpenBracket:
@@ -387,7 +368,7 @@ function parseLeftHandSideExpression(state: ParserState, context: Context): Left
       state.assignable = true;
       nextToken(state);
       context = Context.Keyed;
-      result = new AccessKeyedExpression(result, parseAssignmentExpression(state, 0));
+      result = new AccessKeyedExpression(result, parseAssignmentExpression(state, 0, 0));
       expect(state, Token.CloseBracket);
       break;
     case Token.OpenParen:
@@ -395,7 +376,7 @@ function parseLeftHandSideExpression(state: ParserState, context: Context): Left
       nextToken(state);
       const args = [];
       while (state.currentToken !== <any>Token.CloseParen) {
-        args.push(parseAssignmentExpression(state, 0));
+        args.push(parseAssignmentExpression(state, 0, 0));
         if (!optional(state, Token.Comma)) {
           break;
         }
@@ -448,7 +429,7 @@ function parseArrayLiteralExpression(state: ParserState, context: Context): Arra
   const elements = [];
   if (state.currentToken !== <any>Token.CloseBracket) {
     do {
-      elements.push(parseAssignmentExpression(state, context));
+      elements.push(parseAssignmentExpression(state, context, 0));
     } while (optional(state, Token.Comma));
   }
   expect(state, Token.CloseBracket);
@@ -488,7 +469,7 @@ function parseObjectLiteralExpression(state: ParserState, context: Context): Obj
       keys.push(state.tokenValue);
       nextToken(state);
       if (optional(state, Token.Colon)) {
-        values.push(parseAssignmentExpression(state, context));
+        values.push(parseAssignmentExpression(state, context, 0));
       } else {
         state.currentChar = currentChar;
         state.currentToken = currentToken;
@@ -499,7 +480,7 @@ function parseObjectLiteralExpression(state: ParserState, context: Context): Obj
       keys.push(state.tokenValue);
       nextToken(state);
       expect(state, Token.Colon);
-      values.push(parseAssignmentExpression(state, context));
+      values.push(parseAssignmentExpression(state, context, 0));
     } else {
       error(state);
     }
@@ -546,7 +527,7 @@ function parseTemplateLiteralExpression(state: ParserState, context: Context, ta
   const cooked: Array<string> = [<string>state.tokenValue];
   const raw: string[] = context & Context.Tagged ? [state.tokenRaw] : undefined as any;
   expect(state, Token.TemplateContinuation);
-  const expressions = [parseAssignmentExpression(state, context)];
+  const expressions = [parseAssignmentExpression(state, context, 0)];
 
   while ((state.currentToken = scanTemplateTail(state)) !== Token.TemplateTail) {
     cooked.push(<string>state.tokenValue);
@@ -554,7 +535,7 @@ function parseTemplateLiteralExpression(state: ParserState, context: Context, ta
       raw.push(state.tokenRaw);
     }
     expect(state, Token.TemplateContinuation);
-    expressions.push(parseAssignmentExpression(state, context));
+    expressions.push(parseAssignmentExpression(state, context, 0));
   }
 
   cooked.push(<string>state.tokenValue);
@@ -794,6 +775,19 @@ const enum Context {
   Ancestor      = 0b00000000000000000000000111111111 //(1 << 9) - 1
 }
 
+const enum Precedence {
+  /* Shifting 6 bits to the left gives us a step size of 64 in a range of
+   * 64 (1 << 6) to 448 (7 << 6) for our precedence bit
+   * This is the lowest value which does not overlap with the token bits 0-38. */
+  Mask                                      = 0b00000000000000000000000000000110, //6,
+
+  /* Performing a bitwise and (&) with this value will return only the
+   * precedence bit, which is used to determine the parsing order of binary
+   * expressions */
+  Binary                                     = 0b00000000000000000000000111000000, //7 << Mask,
+  Unary                                      = 0b00000000000000000000001000000000, //8 << Mask,
+}
+
 // Tokens
 
 const enum Token {
@@ -802,15 +796,6 @@ const enum Token {
    * TokenValues array */
   TokenMask                                  = 0b00000000000000000000000000111111, //(1 << 6) - 1,
 
-  /* Shifting 6 bits to the left gives us a step size of 64 in a range of
-   * 64 (1 << 6) to 448 (7 << 6) for our precedence bit
-   * This is the lowest value which does not overlap with the token bits 0-38. */
-  PrecShift                                  = 0b00000000000000000000000000000110, //6,
-
-  /* Performing a bitwise and (&) with this value will return only the
-   * precedence bit, which is used to determine the parsing order of binary
-   * expressions */
-  Precedence                                 = 0b00000000000000000000000111000000, //7 << PrecShift,
 
   // The tokens must start at 1 << 11 to avoid conflict with Precedence (1 << 10 === 16 << 6)
   // and can go up to 1 << 30 (1 << 31 rolls over to negative)
@@ -860,25 +845,25 @@ const enum Token {
   // Operator precedence: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Operator_Precedence#Table
   /** '&' */         Ampersand               = 0b00000000000000000100000000010011, //19 | AccessScopeTerminal,
   /** '|' */         Bar                     = 0b00000000000000000100000000010100, //20 | AccessScopeTerminal,
-  /** '||' */        BarBar                  = 0b00000000001000000000000001010101, //21 /* 5*/ |  1 << PrecShift | BinaryOp,
-  /** '&&' */        AmpersandAmpersand      = 0b00000000001000000000000010010110, //22 /* 6*/ |  2 << PrecShift | BinaryOp,
-  /** '==' */        EqualsEquals            = 0b00000000001000000000000011010111, //23 /*10*/ |  3 << PrecShift | BinaryOp,
-  /** '!=' */        ExclamationEquals       = 0b00000000001000000000000011011000, //24 /*10*/ |  3 << PrecShift | BinaryOp,
-  /** '===' */       EqualsEqualsEquals      = 0b00000000001000000000000011011001, //25 /*10*/ |  3 << PrecShift | BinaryOp,
-  /** '!== '*/       ExclamationEqualsEquals = 0b00000000001000000000000011011010, //26 /*10*/ |  3 << PrecShift | BinaryOp,
-  /** '<' */         LessThan                = 0b00000000001000000000000100011011, //27 /*11*/ |  4 << PrecShift | BinaryOp,
-  /** '>' */         GreaterThan             = 0b00000000001000000000000100011100, //28 /*11*/ |  4 << PrecShift | BinaryOp,
-  /** '<=' */        LessThanEquals          = 0b00000000001000000000000100011101, //29 /*11*/ |  4 << PrecShift | BinaryOp,
-  /** '>=' */        GreaterThanEquals       = 0b00000000001000000000000100011110, //30 /*11*/ |  4 << PrecShift | BinaryOp,
-  /** 'in' */        InKeyword               = 0b00000000001000001000000100011111, //31 /*11*/ |  4 << PrecShift | BinaryOp | Keyword,
-  /** 'instanceof' */InstanceOfKeyword       = 0b00000000001000001000000100100000, //32 /*11*/ |  4 << PrecShift | BinaryOp | Keyword,
-  /** '+' */         Plus                    = 0b00000000011000000000000101100001, //33 /*13*/ |  5 << PrecShift | BinaryOp | UnaryOp,
-  /** '-' */         Minus                   = 0b00000000011000000000000101100010, //34 /*13*/ |  5 << PrecShift | BinaryOp | UnaryOp,
+  /** '||' */        BarBar                  = 0b00000000001000000000000010010101, //21 /* 5*/ |  2 << Precedence.Mask | BinaryOp,
+  /** '&&' */        AmpersandAmpersand      = 0b00000000001000000000000011010110, //22 /* 6*/ |  3 << Precedence.Mask | BinaryOp,
+  /** '==' */        EqualsEquals            = 0b00000000001000000000000100010111, //23 /*10*/ |  4 << Precedence.Mask | BinaryOp,
+  /** '!=' */        ExclamationEquals       = 0b00000000001000000000000100011000, //24 /*10*/ |  4 << Precedence.Mask | BinaryOp,
+  /** '===' */       EqualsEqualsEquals      = 0b00000000001000000000000100011001, //25 /*10*/ |  4 << Precedence.Mask | BinaryOp,
+  /** '!== '*/       ExclamationEqualsEquals = 0b00000000001000000000000100011010, //26 /*10*/ |  4 << Precedence.Mask | BinaryOp,
+  /** '<' */         LessThan                = 0b00000000001000000000000101011011, //27 /*11*/ |  5 << Precedence.Mask | BinaryOp,
+  /** '>' */         GreaterThan             = 0b00000000001000000000000101011100, //28 /*11*/ |  5 << Precedence.Mask | BinaryOp,
+  /** '<=' */        LessThanEquals          = 0b00000000001000000000000101011101, //29 /*11*/ |  5 << Precedence.Mask | BinaryOp,
+  /** '>=' */        GreaterThanEquals       = 0b00000000001000000000000101011110, //30 /*11*/ |  5 << Precedence.Mask | BinaryOp,
+  /** 'in' */        InKeyword               = 0b00000000001000001000000101011111, //31 /*11*/ |  5 << Precedence.Mask | BinaryOp | Keyword,
+  /** 'instanceof' */InstanceOfKeyword       = 0b00000000001000001000000101100000, //32 /*11*/ |  5 << Precedence.Mask | BinaryOp | Keyword,
+  /** '+' */         Plus                    = 0b00000000011000000000000110100001, //33 /*13*/ |  6 << Precedence.Mask | BinaryOp | UnaryOp,
+  /** '-' */         Minus                   = 0b00000000011000000000000110100010, //34 /*13*/ |  6 << Precedence.Mask | BinaryOp | UnaryOp,
   /** 'typeof' */    TypeofKeyword           = 0b00000000010000001000000000100011, //35 /*16*/ | UnaryOp | Keyword,
   /** 'void' */      VoidKeyword             = 0b00000000010000001000000000100100, //36 /*16*/ | UnaryOp | Keyword,
-  /** '*' */         Asterisk                = 0b00000000001000000000000110100101, //37 /*14*/ |  6 << PrecShift | BinaryOp,
-  /** '%' */         Percent                 = 0b00000000001000000000000110100110, //38 /*14*/ |  6 << PrecShift | BinaryOp,
-  /** '/' */         Slash                   = 0b00000000001000000000000110100111, //39 /*14*/ |  6 << PrecShift | BinaryOp,
+  /** '*' */         Asterisk                = 0b00000000001000000000000111100101, //37 /*14*/ |  7 << Precedence.Mask | BinaryOp,
+  /** '%' */         Percent                 = 0b00000000001000000000000111100110, //38 /*14*/ |  7 << Precedence.Mask | BinaryOp,
+  /** '/' */         Slash                   = 0b00000000001000000000000111100111, //39 /*14*/ |  7 << Precedence.Mask | BinaryOp,
   /** '=' */         Equals                  = 0b00000000000000000000000000101000, //40,
   /** '!' */         Exclamation             = 0b00000000010000000000000000101001, //41 | UnaryOp
 }

@@ -587,23 +587,24 @@ export class UnaryExpression {
   public unbind: undefined;
 
   public expression:  LeftHandSideExpression;
-  public operation: 'void' | 'typeof' | '!' | '-';
-  constructor(operation: 'void' | 'typeof' | '!' | '-', expression: LeftHandSideExpression) {
+  public operation: 'void' | 'typeof' | '!' | '-' | '+';
+  constructor(operation: 'void' | 'typeof' | '!' | '-' | '+', expression: LeftHandSideExpression) {
     this.operation = operation;
     this.expression = expression;
   }
 
   public evaluate(scope: Scope, lookupFunctions: LookupFunctions, flags: BindingFlags): any {
     switch (this.operation) {
+      case 'void':
+        return void this.expression.evaluate(scope, lookupFunctions, flags);
+      case 'typeof':
+        return typeof this.expression.evaluate(scope, lookupFunctions, flags);
       case '!':
         return !this.expression.evaluate(scope, lookupFunctions, flags);
       case '-':
-        const val = this.expression.evaluate(scope, lookupFunctions, flags);
-        return val === null || val === undefined ? null : 0 - val;
-      case 'typeof':
-        return typeof this.expression.evaluate(scope, lookupFunctions, flags);
-      case 'void':
-        return void this.expression.evaluate(scope, lookupFunctions, flags);
+        return -this.expression.evaluate(scope, lookupFunctions, flags);
+      case '+':
+        return +this.expression.evaluate(scope, lookupFunctions, flags);
       default:
     }
 
