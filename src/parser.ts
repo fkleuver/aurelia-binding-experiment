@@ -569,14 +569,14 @@ function nextChar(state: ParserState): number {
   return state.currentChar = state.input.charCodeAt(++state.index);
 }
 
-function scanIdentifier(state: ParserState): Token.Identifier | typeof KeywordLookup[keyof typeof KeywordLookup] {
+function scanIdentifier(state: ParserState): Token {
   // run to the next non-idPart
   while (IdParts[nextChar(state)]) {}
 
   return KeywordLookup[state.tokenValue = state.tokenRaw] || Token.Identifier;
 }
 
-function scanNumber(state: ParserState, isFloat: boolean): Token.NumericLiteral {
+function scanNumber(state: ParserState, isFloat: boolean): Token {
   if (isFloat) {
     state.tokenValue = 0;
   } else {
@@ -602,7 +602,7 @@ function scanNumber(state: ParserState, isFloat: boolean): Token.NumericLiteral 
   return Token.NumericLiteral;
 }
 
-function scanString(state: ParserState): Token.StringLiteral {
+function scanString(state: ParserState): Token {
   const quote = state.currentChar;
   nextChar(state); // Skip initial quote.
 
@@ -640,7 +640,7 @@ function scanString(state: ParserState): Token.StringLiteral {
   return Token.StringLiteral;
 }
 
-function scanTemplate(state: ParserState): Token.TemplateTail | Token.TemplateContinuation {
+function scanTemplate(state: ParserState): Token {
   let tail = true;
   let result = '';
 
@@ -668,7 +668,7 @@ function scanTemplate(state: ParserState): Token.TemplateTail | Token.TemplateCo
   return Token.TemplateContinuation;
 }
 
-function scanTemplateTail(state: ParserState): ReturnType<typeof scanTemplate> {
+function scanTemplateTail(state: ParserState): Token {
   if (state.index >= state.length) {
     error(state, 'Unterminated template');
   }
@@ -713,99 +713,86 @@ function unescape(code: number): number {
 }
 
 const enum Access {
-  Reset                   = 0b00000000000000000000000, // 0
-  Ancestor                = 0b00000000000000111111111, // This - 1
-  This                    = 0b00000000000001000000000, // 1 <<  9
-  Scope                   = 0b00000000000010000000000, // 1 << 10
-  Member                  = 0b00000000000100000000000, // 1 << 11
-  Keyed                   = 0b00000000001000000000000  // 1 << 12
+  Reset                   = 0b0000000000000,
+  Ancestor                = 0b0000111111111,
+  This                    = 0b0001000000000,
+  Scope                   = 0b0010000000000,
+  Member                  = 0b0100000000000,
+  Keyed                   = 0b1000000000000
 }
 const enum Precedence {
-  //                                        |
-  Variadic                = 0b00000000000000000111101, // LogicalOR - 3
-  Assignment              = 0b00000000000000000111110, // LogicalOR - 2
-  Conditional             = 0b00000000000000000111111, // LogicalOR - 1
-  LogicalOR               = 0b00000000000000001000000, // 1 << 6
-  LogicalAND              = 0b00000000000000010000000, // 2 << 6
-  Equality                = 0b00000000000000011000000, // 3 << 6
-  Relational              = 0b00000000000000100000000, // 4 << 6
-  Additive                = 0b00000000000000101000000, // 5 << 6
-  Multiplicative          = 0b00000000000000110000000, // 6 << 6
-  Binary                  = 0b00000000000000111000000, // 7 << 6
-  LeftHandSide            = 0b00000000000000111000000, // Binary + 1
-  Primary                 = 0b00000000000000111000001, // Binary + 2
-  Unary                   = 0b00000000000000111000010, // Binary + 3
-  //                                        |
+  Variadic                = 0b000111101,
+  Assignment              = 0b000111110,
+  Conditional             = 0b000111111,
+  LogicalOR               = 0b001000000,
+  LogicalAND              = 0b010000000,
+  Equality                = 0b011000000,
+  Relational              = 0b100000000,
+  Additive                = 0b101000000,
+  Multiplicative          = 0b110000000,
+  Binary                  = 0b111000000,
+  LeftHandSide            = 0b111000000,
+  Primary                 = 0b111000001,
+  Unary                   = 0b111000010,
 }
 const enum Token {
-  //                                        |
-  ExpressionTerminal      = 0b00000000000100000000000, // 1 << 11,
-  AccessScopeTerminal     = 0b00000000100000000000000, // 1 << 14,
-  EOF                     = 0b00000000100100000000000, // AccessScopeTerminal | ExpressionTerminal,
-  ClosingToken            = 0b00000000001000000000000, // 1 << 12,
-  OpeningToken            = 0b00000000010000000000000, // 1 << 13,
-  Keyword                 = 0b00000001000000000000000, // 1 << 15,
-  Identifier              = 0b00000010000000000000000, // 1 << 16,
-  IdentifierName          = 0b00000011000000000000000, // Identifier | Keyword,
-  NumericLiteral          = 0b00000100000000000000000, // 1 << 17,
-  StringLiteral           = 0b00001000000000000000000, // 1 << 18,
-  StringOrNumericLiteral  = 0b00001100000000000000000, // NumericLiteral | StringLiteral,
-  PropertyName            = 0b00001111000000000000000, // IdentifierName | StringOrNumericLiteral,
-  LeftHandSide            = 0b00010000000000000000000, // 1 << 19,
-  BinaryOp                = 0b01000000000000000000000, // 1 << 21,
-  UnaryOp                 = 0b10000000000000000000000, // 1 << 22,
-  //                                        |
-  Precedence              = 0b00000000000000111000000,
-  //                                        |
-  Type                    = 0b00000000000000000111111,
-  //                                        |  |
-  FalseKeyword            = 0b00000001000000000000000, //  0 |                      Keyword
-  TrueKeyword             = 0b00000001000000000000001, //  1 |                      Keyword
-  NullKeyword             = 0b00000001000000000000010, //  2 |                      Keyword
-  UndefinedKeyword        = 0b00000001000000000000011, //  3 |                      Keyword
-  ThisScope               = 0b00000011000000000000100, //  4 |                      IdentifierName
-  ParentScope             = 0b00000011000000000000101, //  5 |                      IdentifierName
-  OpenParen               = 0b00010000110000000000110, //  6 |                      LeftHandSide | OpeningToken | AccessScopeTerminal
-  OpenBrace               = 0b00000000010000000000111, //  7 |                                     OpeningToken
-  Dot                     = 0b00010000000000000001000, //  8 |                      LeftHandSide,
-  //                                        |  |
-  CloseBrace              = 0b00000000101100000001001, //  9 |                                     ClosingToken | AccessScopeTerminal | ExpressionTerminal
-  CloseParen              = 0b00000000101100000001010, // 10 |                                     ClosingToken | AccessScopeTerminal | ExpressionTerminal
-  Semicolon               = 0b00000000000100000001011, // 11 |                                                                          ExpressionTerminal
-  Comma                   = 0b00000000100000000001100, // 12 |                                     AccessScopeTerminal
-  OpenBracket             = 0b00010000110000000001101, // 13 |                      LeftHandSide | OpeningToken | AccessScopeTerminal
-  CloseBracket            = 0b00000000001100000001110, // 14 |                                     ClosingToken |                       ExpressionTerminal
-  Colon                   = 0b00000000100000000001111, // 15 |                                     AccessScopeTerminal,
-  Question                = 0b00000000000000000010000, // 16,
-  //                                        |  |
-  Ampersand               = 0b00000000100000000010011, // 19 |                                     AccessScopeTerminal
-  Bar                     = 0b00000000100000000010100, // 20 |                                     AccessScopeTerminal
-  BarBar                  = 0b01000000000000010010101, // 21 |           BinaryOp |                Precedence.LogicalOR
-  AmpersandAmpersand      = 0b01000000000000011010110, // 22 |           BinaryOp |                Precedence.LogicalAND
-  EqualsEquals            = 0b01000000000000100010111, // 23 |           BinaryOp |                Precedence.Equality
-  ExclamationEquals       = 0b01000000000000100011000, // 24 |           BinaryOp |                Precedence.Equality
-  EqualsEqualsEquals      = 0b01000000000000100011001, // 25 |           BinaryOp |                Precedence.Equality
-  ExclamationEqualsEquals = 0b01000000000000100011010, // 26 |           BinaryOp |                Precedence.Equality
-  //                                        |  |
-  LessThan                = 0b01000000000000101011011, // 27 |           BinaryOp |                Precedence.Relational
-  GreaterThan             = 0b01000000000000101011100, // 28 |           BinaryOp |                Precedence.Relational
-  LessThanEquals          = 0b01000000000000101011101, // 29 |           BinaryOp |                Precedence.Relational
-  GreaterThanEquals       = 0b01000000000000101011110, // 30 |           BinaryOp |                Precedence.Relational
-  InKeyword               = 0b01000001000000101011111, // 31 |           BinaryOp | Keyword |      Precedence.Relational
-  InstanceOfKeyword       = 0b01000001000000101100000, // 32 |           BinaryOp | Keyword |      Precedence.Relational
-  Plus                    = 0b11000000000000110100001, // 33 | UnaryOp | BinaryOp |                Precedence.Additive
-  Minus                   = 0b11000000000000110100010, // 34 | UnaryOp | BinaryOp |                Precedence.Additive
-  //                                        |  |
-  TypeofKeyword           = 0b10000001000000000100011, // 35 | UnaryOp |            Keyword
-  VoidKeyword             = 0b10000001000000000100100, // 36 | UnaryOp |            Keyword
-  Asterisk                = 0b01000000000000111100101, // 37 |           BinaryOp |                Precedence.Multiplicative
-  Percent                 = 0b01000000000000111100110, // 38 |           BinaryOp |                Precedence.Multiplicative
-  Slash                   = 0b01000000000000111100111, // 39 |           BinaryOp |                Precedence.Multiplicative
-  Equals                  = 0b00000000000000000101000, // 40
-  Exclamation             = 0b10000000000000000101001, // 41 | UnaryOp
-  TemplateTail            = 0b00010000000000000101010, // 42 |                      LeftHandSide
-  TemplateContinuation    = 0b00010000000000000101011, // 43 |                      LeftHandSide
-  //                                        |  |
+  EOF                     = 0b11000000000 << 9,
+  ExpressionTerminal      = 0b10000000000 << 9,
+  AccessScopeTerminal     = 0b01000000000 << 9,
+  ClosingToken            = 0b00100000000 << 9,
+  OpeningToken            = 0b00010000000 << 9,
+  BinaryOp                = 0b00001000000 << 9,
+  UnaryOp                 = 0b00000100000 << 9,
+  LeftHandSide            = 0b00000010000 << 9,
+  StringOrNumericLiteral  = 0b00000001100 << 9,
+  NumericLiteral          = 0b00000001000 << 9,
+  StringLiteral           = 0b00000000100 << 9,
+  IdentifierName          = 0b00000000011 << 9,
+  Keyword                 = 0b00000000010 << 9,
+  Identifier              = 0b00000000001 << 9,
+  Precedence              = 0b00000000000 << 9 | 0b111 << 6,
+  Type                    = 0b00000000000 << 9 | 0b000 << 6 | 0b111111,
+  FalseKeyword            = 0b00000000010 << 9 | 0b000 << 6 | 0b000000,
+  TrueKeyword             = 0b00000000010 << 9 | 0b000 << 6 | 0b000001,
+  NullKeyword             = 0b00000000010 << 9 | 0b000 << 6 | 0b000010,
+  UndefinedKeyword        = 0b00000000010 << 9 | 0b000 << 6 | 0b000011,
+  ThisScope               = 0b00000000011 << 9 | 0b000 << 6 | 0b000100,
+  ParentScope             = 0b00000000011 << 9 | 0b000 << 6 | 0b000101,
+  OpenParen               = 0b01010010000 << 9 | 0b000 << 6 | 0b000110,
+  OpenBrace               = 0b00010000000 << 9 | 0b000 << 6 | 0b000111,
+  Dot                     = 0b00000010000 << 9 | 0b000 << 6 | 0b001000,
+  CloseBrace              = 0b11100000000 << 9 | 0b000 << 6 | 0b001001,
+  CloseParen              = 0b11100000000 << 9 | 0b000 << 6 | 0b001010,
+  Comma                   = 0b01000000000 << 9 | 0b000 << 6 | 0b001011,
+  OpenBracket             = 0b01010010000 << 9 | 0b000 << 6 | 0b001100,
+  CloseBracket            = 0b10100000000 << 9 | 0b000 << 6 | 0b001101,
+  Colon                   = 0b01000000000 << 9 | 0b000 << 6 | 0b001110,
+  Question                = 0b00000000000 << 9 | 0b000 << 6 | 0b001111,
+  Ampersand               = 0b01000000000 << 9 | 0b000 << 6 | 0b010000,
+  Bar                     = 0b01000000000 << 9 | 0b000 << 6 | 0b010011,
+  BarBar                  = 0b00001000000 << 9 | 0b010 << 6 | 0b010100,
+  AmpersandAmpersand      = 0b00001000000 << 9 | 0b011 << 6 | 0b010101,
+  EqualsEquals            = 0b00001000000 << 9 | 0b100 << 6 | 0b010110,
+  ExclamationEquals       = 0b00001000000 << 9 | 0b100 << 6 | 0b010111,
+  EqualsEqualsEquals      = 0b00001000000 << 9 | 0b100 << 6 | 0b011000,
+  ExclamationEqualsEquals = 0b00001000000 << 9 | 0b100 << 6 | 0b011001,
+  LessThan                = 0b00001000000 << 9 | 0b101 << 6 | 0b011010,
+  GreaterThan             = 0b00001000000 << 9 | 0b101 << 6 | 0b011011,
+  LessThanEquals          = 0b00001000000 << 9 | 0b101 << 6 | 0b011100,
+  GreaterThanEquals       = 0b00001000000 << 9 | 0b101 << 6 | 0b011101,
+  InKeyword               = 0b00001000010 << 9 | 0b101 << 6 | 0b011110,
+  InstanceOfKeyword       = 0b00001000010 << 9 | 0b101 << 6 | 0b011111,
+  Plus                    = 0b00001100000 << 9 | 0b110 << 6 | 0b100000,
+  Minus                   = 0b00001100000 << 9 | 0b110 << 6 | 0b100001,
+  TypeofKeyword           = 0b00000100010 << 9 | 0b000 << 6 | 0b100010,
+  VoidKeyword             = 0b00000100010 << 9 | 0b000 << 6 | 0b100011,
+  Asterisk                = 0b00001000000 << 9 | 0b111 << 6 | 0b100100,
+  Percent                 = 0b00001000000 << 9 | 0b111 << 6 | 0b100101,
+  Slash                   = 0b00001000000 << 9 | 0b111 << 6 | 0b100110,
+  Equals                  = 0b00000000000 << 9 | 0b000 << 6 | 0b100111,
+  Exclamation             = 0b00000100000 << 9 | 0b000 << 6 | 0b101000,
+  TemplateTail            = 0b00000010000 << 9 | 0b000 << 6 | 0b101001,
+  TemplateContinuation    = 0b00000010000 << 9 | 0b000 << 6 | 0b101010,
 }
 
 const enum Char {
@@ -841,7 +828,6 @@ const enum Char {
   Bar            = 0x7C,
   CloseBrace     = 0x7D,
   Colon          = 0x3A,
-  Semicolon      = 0x3B,
   LessThan       = 0x3C,
   Equals         = 0x3D,
   GreaterThan    = 0x3E,
@@ -913,20 +899,6 @@ const enum Char {
   LowerZ  = 0x7A
 }
 
-const KeywordLookup: {
-  [key: string]: Token.TrueKeyword | Token.NullKeyword | Token.FalseKeyword | Token.UndefinedKeyword | Token.ThisScope | Token.ParentScope | Token.InKeyword | Token.InstanceOfKeyword | Token.TypeofKeyword | Token.VoidKeyword;
-} = Object.create(null);
-KeywordLookup.true = Token.TrueKeyword;
-KeywordLookup.null = Token.NullKeyword;
-KeywordLookup.false = Token.FalseKeyword;
-KeywordLookup.undefined = Token.UndefinedKeyword;
-KeywordLookup.$this = Token.ThisScope;
-KeywordLookup.$parent = Token.ParentScope;
-KeywordLookup.in = Token.InKeyword;
-KeywordLookup.instanceof = Token.InstanceOfKeyword;
-KeywordLookup.typeof = Token.TypeofKeyword;
-KeywordLookup.void = Token.VoidKeyword;
-
 const $false = new PrimitiveLiteralExpression(false);
 const $true = new PrimitiveLiteralExpression(true);
 const $null = new PrimitiveLiteralExpression(null);
@@ -941,12 +913,26 @@ const $undefined = new PrimitiveLiteralExpression(undefined);
 const TokenValues = [
   $false, $true, $null, $undefined, '$this', '$parent',
 
-  '(', '{', '.', '}', ')', ';', ',', '[', ']', ':', '?', '\'', '"',
+  '(', '{', '.', '}', ')', ',', '[', ']', ':', '?', '\'', '"',
 
   '&', '|', '||', '&&', '==', '!=', '===', '!==', '<', '>',
   '<=', '>=', 'in', 'instanceof', '+', '-', 'typeof', 'void', '*', '%', '/', '=', '!',
   Token.TemplateTail, Token.TemplateContinuation
 ];
+
+const KeywordLookup: {
+  [key: string]: Token;
+} = Object.create(null);
+KeywordLookup.true = Token.TrueKeyword;
+KeywordLookup.null = Token.NullKeyword;
+KeywordLookup.false = Token.FalseKeyword;
+KeywordLookup.undefined = Token.UndefinedKeyword;
+KeywordLookup.$this = Token.ThisScope;
+KeywordLookup.$parent = Token.ParentScope;
+KeywordLookup.in = Token.InKeyword;
+KeywordLookup.instanceof = Token.InstanceOfKeyword;
+KeywordLookup.typeof = Token.TypeofKeyword;
+KeywordLookup.void = Token.VoidKeyword;
 
 /**
  * Ranges of code points in pairs of 2 (eg 0x41-0x5B, 0x61-0x7B, ...) where the second value is not inclusive (5-7 means 5 and 6)
@@ -986,7 +972,7 @@ function decompress(lookup: Array<CharScanner | number> | null, set: Set<number>
 }
 
 // CharFuncLookup functions
-function returnToken<T extends Token>(token: T): (s: ParserState) => T {
+function returnToken(token: Token): (s: ParserState) => Token {
   return s => {
     nextChar(s);
     return token;
