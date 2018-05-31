@@ -734,15 +734,17 @@ function expect(state: ParserState, token: Token): void {
   }
 }
 
-// todo: we're missing a few here (https://tc39.github.io/ecma262/#table-34)
-// find out if the full list can be included without introducing a breaking change
 function unescape(code: number): number {
   switch (code) {
-  case Char.LowerF: return Char.FormFeed;
-  case Char.LowerN: return Char.LineFeed;
-  case Char.LowerR: return Char.CarriageReturn;
+  case Char.LowerB: return Char.Backspace;
   case Char.LowerT: return Char.Tab;
+  case Char.LowerN: return Char.LineFeed;
   case Char.LowerV: return Char.VerticalTab;
+  case Char.LowerF: return Char.FormFeed;
+  case Char.LowerR: return Char.CarriageReturn;
+  case Char.DoubleQuote: return Char.DoubleQuote;
+  case Char.SingleQuote: return Char.SingleQuote;
+  case Char.Backslash: return Char.Backslash;
   default: return code;
   }
 }
@@ -845,6 +847,7 @@ const enum Token {
 
 const enum Char {
   Null           = 0x00,
+  Backspace      = 0x08,
   Tab            = 0x09,
   LineFeed       = 0x0A,
   VerticalTab    = 0x0B,
