@@ -599,22 +599,6 @@ function scanNumber(state: ParserState, isFloat: boolean): Token.NumericLiteral 
     state.tokenValue = state.tokenValue + value / 10 ** (state.index - start);
   }
 
-  if (state.currentChar === Char.LowerE || state.currentChar === Char.UpperE) {
-    const start = state.index;
-
-    nextChar(state);
-    if (state.currentChar === <any>Char.Minus || state.currentChar === <any>Char.Plus) {
-      nextChar(state);
-    }
-
-    if (!(state.currentChar >= Char.Zero && state.currentChar <= Char.Nine)) {
-      state.index = start;
-      error(state, 'Invalid exponent');
-    }
-    while (nextChar(state) <= Char.Nine && state.currentChar >= Char.Zero) { } // eslint-disable-line no-empty
-    state.tokenValue = parseFloat(state.input.slice(state.startIndex, state.index));
-  }
-
   return Token.NumericLiteral;
 }
 
@@ -629,30 +613,9 @@ function scanString(state: ParserState): Token.StringLiteral {
   while (state.currentChar !== quote) {
     if (state.currentChar === Char.Backslash) {
       buffer.push(state.input.slice(marker, state.index));
-
       nextChar(state);
-
-      if (state.currentChar === <any>Char.LowerU) {
-        nextChar(state);
-
-        if (state.index + 4 < state.length) {
-          const hex = state.input.slice(state.index, state.index + 4);
-
-          if (!/[A-Z0-9]{4}/i.test(hex)) {
-            error(state, `Invalid unicode escape [\\u${hex}]`);
-          }
-
-          unescaped = parseInt(hex, 16);
-          state.index += 4;
-          state.currentChar = state.input.charCodeAt(state.index);
-        } else {
-          error(state);
-        }
-      } else {
-        unescaped = unescape(state.currentChar);
-        nextChar(state);
-      }
-
+      unescaped = unescape(state.currentChar);
+      nextChar(state);
       buffer.push(String.fromCharCode(unescaped));
       marker = state.index;
     } else if (state.currentChar === /*EOF*/0) {

@@ -61,8 +61,8 @@ describe('Parser', () => {
       // http://es5.github.io/x7.html#x7.8.4
       const tests = [
         { expr: '\'foo\'', expected: new PrimitiveLiteralExpression('foo') },
-        { expr: `\'${unicodeEscape('äöüÄÖÜß')}\'`, expected: new PrimitiveLiteralExpression('äöüÄÖÜß') },
-        { expr: `\'${unicodeEscape('ಠ_ಠ')}\'`, expected: new PrimitiveLiteralExpression('ಠ_ಠ') },
+        { expr: '\'äöüÄÖÜß\'', expected: new PrimitiveLiteralExpression('äöüÄÖÜß') },
+        { expr: '\'ಠ_ಠ\'', expected: new PrimitiveLiteralExpression('ಠ_ಠ') },
         { expr: '\'\\\\\'', expected: new PrimitiveLiteralExpression('\\') },
         { expr: '\'\\\'\'', expected: new PrimitiveLiteralExpression('\'') },
         { expr: '\'"\'', expected: new PrimitiveLiteralExpression('"') },
@@ -122,16 +122,10 @@ describe('Parser', () => {
         { expr: '-(+1)', expected: new UnaryExpression('-', new UnaryExpression('+', $num1)) },
         { expr: '+(+1)', expected: new UnaryExpression('+', new UnaryExpression('+', $num1)) },
         { expr: '9007199254740992', expected: new PrimitiveLiteralExpression(9007199254740992) }, // Number.MAX_SAFE_INTEGER + 1
-        { expr: '1.7976931348623157e+308', expected: new PrimitiveLiteralExpression(1.7976931348623157e+308) }, // Number.MAX_VALUE
-        { expr: '1.7976931348623157E+308', expected: new PrimitiveLiteralExpression(1.7976931348623157e+308) }, // Number.MAX_VALUE
         { expr: '-9007199254740992', expected: new UnaryExpression('-', new PrimitiveLiteralExpression(9007199254740992)) }, // Number.MIN_SAFE_INTEGER - 1
-        { expr: '5e-324', expected: new PrimitiveLiteralExpression(5e-324) }, // Number.MIN_VALUE
-        { expr: '5E-324', expected: new PrimitiveLiteralExpression(5e-324) }, // Number.MIN_VALUE
         { expr: '2.2', expected: new PrimitiveLiteralExpression(2.2) },
-        { expr: '2.2e2', expected: new PrimitiveLiteralExpression(2.2e2) },
         { expr: '.42', expected: new PrimitiveLiteralExpression(.42) },
-        { expr: '0.42', expected: new PrimitiveLiteralExpression(.42) },
-        { expr: '.42E10', expected: new PrimitiveLiteralExpression(.42e10) }
+        { expr: '0.42', expected: new PrimitiveLiteralExpression(.42) }
       ];
 
       for (const { expr, expected } of tests) {
@@ -731,16 +725,6 @@ describe('Parser', () => {
           } else {
             _verifyError(expr, `Unexpected token ${expr.slice(0, 0)}`);
           }
-        });
-      }
-    });
-
-    describe('invalid exponent', () => {
-      const expressions = ['1e', '1ee', '1e.'];
-
-      for (const expr of expressions) {
-        it(expr, () => {
-          _verifyError(expr, 'Invalid exponent');
         });
       }
     });
