@@ -19,6 +19,7 @@
     "skipLibCheck": true,
     "sourceMap": true,
     "strict": true,
+    "strictPropertyInitialization": false,
     "stripInternal": true,
     "target": "es2015",
   },

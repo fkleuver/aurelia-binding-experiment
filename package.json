@@ -2,7 +2,11 @@
   "name": "aurelia-binding-experiment",
   "version": "0.1.0",
   "description": "An experimental rework of aurelia-binding in TypeScript",
-  "keywords": ["aurelia", "binding", "experiment"],
+  "keywords": [
+    "aurelia",
+    "binding",
+    "experiment"
+  ],
   "homepage": "https://github.com/fkleuver/aurelia-binding-experiment",
   "bugs": {
     "url": "https://github.com/fkleuver/aurelia-binding-experiment/issues"
@@ -16,19 +20,31 @@
     "url": "https://github.com/fkleuver/aurelia-binding-experiment"
   },
   "scripts": {
-    "lint": "cross-env ./node_modules/.bin/tslint",
-    "test": "cross-env TS_NODE_PROJECT='tsconfig-test.json' ./node_modules/.bin/mocha ./test/**/*.ts --require ts-node/register --globals expect --watch-extensions ts --colors --recursive --timeout 5000"
+    "test:clean": "./node_modules/.bin/rimraf ./test/build",
+    "test:transpile": "./node_modules/.bin/tsc --project ./test/tsconfig.json",
+    "test": "npm run test:clean && npm run test:transpile && node ./scripts/test.js"
   },
   "devDependencies": {
+    "@types/browserify": "^12.0.33",
     "@types/chai": "^4.1.3",
     "@types/mocha": "^5.2.0",
     "@types/node": "^10.1.2",
+    "@types/puppeteer": "^1.3.2",
+    "@types/sinon": "^5.0.1",
+    "@types/sinon-chai": "^2.7.32",
+    "aurelia-dependency-injection": "^1.3.2",
+    "aurelia-pal-browser": "^1.8.0",
+    "aurelia-polyfills": "^1.3.0",
+    "aurelia-task-queue": "^1.3.0",
+    "bluebird": "^3.5.1",
+    "browserify": "^16.2.2",
     "chai": "^4.1.2",
-    "cross-env": "^5.1.6",
     "mocha": "^5.2.0",
-    "ts-node": "^6.0.5",
-    "tslint-microsoft-contrib": "^5.0.3",
+    "puppeteer": "^1.4.0",
+    "rimraf": "^2.6.2",
+    "sinon": "^5.0.10",
     "tslint": "^5.10.0",
+    "tslint-microsoft-contrib": "^5.0.3",
     "typescript": "^2.8.3"
   }
 }

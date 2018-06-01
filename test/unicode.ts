@@ -11,7 +11,7 @@ const otherBMPIdentifierPartCodes = [
   65500 /*ￜ*/
 ];
 
-function toChars(list) {
+function toChars(list: number[]): string[] {
   return list.map((val, idx, arr) => {
     if (idx % 2 === 0) {
       const chars = [String.fromCharCode(arr[idx])];
@@ -24,9 +24,9 @@ function toChars(list) {
   }).reduce((prev, cur) => prev.concat(...cur), []);
 }
 
-let latin1IdentifierPartChars = toChars(latin1IdentifierPartCodes);
-let latin1IdentifierStartChars = toChars(latin1IdentifierStartCodes);
-let otherBMPIdentifierPartChars = toChars(otherBMPIdentifierPartCodes);
+const latin1IdentifierPartChars = toChars(latin1IdentifierPartCodes);
+const latin1IdentifierStartChars = toChars(latin1IdentifierStartCodes);
+const otherBMPIdentifierPartChars = toChars(otherBMPIdentifierPartCodes);
 
 export {
   latin1IdentifierStartChars, latin1IdentifierPartChars, otherBMPIdentifierPartChars

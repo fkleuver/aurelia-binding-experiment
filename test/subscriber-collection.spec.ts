@@ -1,0 +1,75 @@
+import { subscriberCollection } from '../src/subscriber-collection';
+import { expect } from 'chai';
+import { spy } from 'sinon';
+
+@subscriberCollection()
+class Test {
+  public callSubscribers: (newValue: any, oldValue: any) => void;
+  public addSubscriber: (context: any, callable: any) => void;
+  public removeSubscriber: (context: any, callable: any) => void;
+  public _callablesRest: any;
+}
+
+describe('subscriberCollection', () => {
+  it('calls subscribers', () => {
+    const observer = new Test();
+    const observer2 = new Test();
+
+    const callable1 = { call: spy() };
+    observer.addSubscriber('1', callable1);
+    const callable2 = { call: spy() };
+    observer.addSubscriber('2', callable2);
+    const callable3 = { call: spy() };
+    observer.addSubscriber('3', callable3);
+    const callable4 = {
+      call: spy(() => observer2.callSubscribers('new value2', 'old value2'))
+    };
+    observer.addSubscriber('4', callable4);
+    const callable5 = { call: spy() };
+    observer.addSubscriber('5', callable5);
+
+    const callable6 = { call: spy() };
+    observer2.addSubscriber('6', callable6);
+    const callable7 = { call: spy() };
+    observer2.addSubscriber('7', callable7);
+    const callable8 = { call: spy() };
+    observer2.addSubscriber('8', callable8);
+    const callable9 = { call: spy() };
+    observer2.addSubscriber('9', callable9);
+    const callable10 = { call: spy() };
+    observer2.addSubscriber('10', callable10);
+
+    observer.callSubscribers('new value', 'old value');
+
+    expect(callable1.call.firstCall.args).to.deep.equal(['1', 'new value', 'old value']);
+    expect(callable2.call.firstCall.args).to.deep.equal(['2', 'new value', 'old value']);
+    expect(callable3.call.firstCall.args).to.deep.equal(['3', 'new value', 'old value']);
+    expect(callable4.call.firstCall.args).to.deep.equal(['4', 'new value', 'old value']);
+    expect(callable5.call.firstCall.args).to.deep.equal(['5', 'new value', 'old value']);
+    expect(callable6.call.firstCall.args).to.deep.equal(['6', 'new value2', 'old value2']);
+    expect(callable7.call.firstCall.args).to.deep.equal(['7', 'new value2', 'old value2']);
+    expect(callable8.call.firstCall.args).to.deep.equal(['8', 'new value2', 'old value2']);
+    expect(callable9.call.firstCall.args).to.deep.equal(['9', 'new value2', 'old value2']);
+    expect(callable10.call.firstCall.args).to.deep.equal(['10', 'new value2', 'old value2']);
+  });
+
+  it('removes subscribers', () => {
+    const observer = new Test();
+
+    const subscribers = [];
+    for (let i = 0, ii = 100; ii > i; ++i) {
+      observer.addSubscriber((i % 5).toString(), (subscribers[i] = { i }));
+    }
+
+    let removalCount = 0;
+    for (let i = 4, ii = subscribers.length; ii > i; i += 5) {
+      const result = observer.removeSubscriber((i % 5).toString(), subscribers[i]);
+      if (result) {
+        removalCount++;
+      }
+    }
+    expect(observer._callablesRest.length).to.equal(subscribers.length - 3 - removalCount);
+
+    expect(observer.removeSubscriber('5', {})).to.be.false;
+  });
+});
