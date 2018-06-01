@@ -1,3 +1,4 @@
+// tslint:disable:no-unused-expression
 import { TaskQueue } from 'aurelia-task-queue';
 import { SetterObserver } from '../src/property-observation';
 import { executeSharedPropertyObserverTests } from './shared';

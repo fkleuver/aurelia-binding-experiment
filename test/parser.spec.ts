@@ -1,3 +1,4 @@
+// tslint:disable:no-unused-expression
 import { Parser } from '../src/parser';
 import { AccessKeyedExpression, AccessMemberExpression, AccessScopeExpression, AccessThisExpression,
   AssignmentExpression, BinaryExpression, BindingBehaviorExpression, CallFunctionExpression,

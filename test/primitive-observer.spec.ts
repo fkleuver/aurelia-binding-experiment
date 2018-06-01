@@ -1,3 +1,4 @@
+// tslint:disable:no-unused-expression
 import { PrimitiveObserver } from '../src/property-observation';
 import { createObserverLocator } from './shared';
 import { expect } from 'chai';

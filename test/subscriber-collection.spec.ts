@@ -1,3 +1,4 @@
+// tslint:disable:no-unused-expression
 import { subscriberCollection } from '../src/subscriber-collection';
 import { expect } from 'chai';
 import { spy } from 'sinon';
@@ -41,16 +42,16 @@ describe('subscriberCollection', () => {
 
     observer.callSubscribers('new value', 'old value');
 
-    expect(callable1.call.firstCall.args).to.deep.equal(['1', 'new value', 'old value']);
-    expect(callable2.call.firstCall.args).to.deep.equal(['2', 'new value', 'old value']);
-    expect(callable3.call.firstCall.args).to.deep.equal(['3', 'new value', 'old value']);
-    expect(callable4.call.firstCall.args).to.deep.equal(['4', 'new value', 'old value']);
-    expect(callable5.call.firstCall.args).to.deep.equal(['5', 'new value', 'old value']);
-    expect(callable6.call.firstCall.args).to.deep.equal(['6', 'new value2', 'old value2']);
-    expect(callable7.call.firstCall.args).to.deep.equal(['7', 'new value2', 'old value2']);
-    expect(callable8.call.firstCall.args).to.deep.equal(['8', 'new value2', 'old value2']);
-    expect(callable9.call.firstCall.args).to.deep.equal(['9', 'new value2', 'old value2']);
-    expect(callable10.call.firstCall.args).to.deep.equal(['10', 'new value2', 'old value2']);
+    expect(callable1.call).to.have.been.calledWith('1', 'new value', 'old value');
+    expect(callable2.call).to.have.been.calledWith('2', 'new value', 'old value');
+    expect(callable3.call).to.have.been.calledWith('3', 'new value', 'old value');
+    expect(callable4.call).to.have.been.calledWith('4', 'new value', 'old value');
+    expect(callable5.call).to.have.been.calledWith('5', 'new value', 'old value');
+    expect(callable6.call).to.have.been.calledWith('6', 'new value2', 'old value2');
+    expect(callable7.call).to.have.been.calledWith('7', 'new value2', 'old value2');
+    expect(callable8.call).to.have.been.calledWith('8', 'new value2', 'old value2');
+    expect(callable9.call).to.have.been.calledWith('9', 'new value2', 'old value2');
+    expect(callable10.call).to.have.been.calledWith('10', 'new value2', 'old value2');
   });
 
   it('removes subscribers', () => {

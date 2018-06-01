@@ -1,3 +1,4 @@
+// tslint:disable:no-unused-expression
 import { Container } from 'aurelia-dependency-injection';
 import { ObserverLocator } from '../src/observer-locator';
 import { expect } from 'chai';
@@ -44,20 +45,20 @@ export function executeSharedPropertyObserverTests(obj: any, observer: any, done
   expect(observer.hasSubscribers()).to.be.false;
   expect(observer.hasSubscriber(context, callable0)).to.be.false;
   observer.subscribe(context, callable0);
-  expect(observer.addSubscriber.lastCall.args).to.deep.equal([context, callable0]);
+  expect(observer.addSubscriber).to.have.been.calledWith(context, callable0);
   expect(countSubscribers(observer)).to.equal(1);
   expect(observer.hasSubscribers()).to.be.true;
   expect(observer.hasSubscriber(context, callable0)).to.be.true;
   // doesn't allow multiple subscribe
   observer.subscribe(context, callable0);
-  expect(observer.addSubscriber.lastCall.args).to.deep.equal([context, callable0]);
+  expect(observer.addSubscriber).to.have.been.calledWith(context, callable0);
   expect(countSubscribers(observer)).to.equal(1);
   // doesn't allow multiple unsubscribe
   observer.unsubscribe(context, callable0);
-  expect(observer.removeSubscriber.lastCall.args).to.deep.equal([context, callable0]);
+  expect(observer.removeSubscriber).to.have.been.calledWith(context, callable0);
   expect(countSubscribers(observer)).to.equal(0);
   observer.unsubscribe(context, callable0);
-  expect(observer.removeSubscriber.lastCall.args).to.deep.equal([context, callable0]);
+  expect(observer.removeSubscriber).to.have.been.calledWith(context, callable0);
   expect(countSubscribers(observer)).to.equal(0);
 
   // overflows into "rest" array
@@ -131,14 +132,14 @@ export function executeSharedPropertyObserverTests(obj: any, observer: any, done
       newValue = values.splice(0, 1)[0];
       observer.setValue(newValue);
       setTimeout(() => {
-        expect(callable0.call.lastCall.args).to.deep.equal([context, newValue, oldValue]);
+        expect(callable0.call).to.have.been.calledWith(context, newValue, oldValue);
         if (!unsubscribeDuringCallbackTested) {
           unsubscribeDuringCallbackTested = true;
-          expect(callable1.call.lastCall.args).to.deep.equal([context, newValue, oldValue]);
-          expect(callable2.call.lastCall.args).to.deep.equal([context, newValue, oldValue]);
-          expect(callable3.call.lastCall.args).to.deep.equal([context, newValue, oldValue]);
-          expect(callable4.call.lastCall.args).to.deep.equal([context, newValue, oldValue]);
-          expect(callable5.call.lastCall.args).to.deep.equal([context, newValue, oldValue]);
+          expect(callable1.call).to.have.been.calledWith(context, newValue, oldValue);
+          expect(callable2.call).to.have.been.calledWith(context, newValue, oldValue);
+          expect(callable3.call).to.have.been.calledWith(context, newValue, oldValue);
+          expect(callable4.call).to.have.been.calledWith(context, newValue, oldValue);
+          expect(callable5.call).to.have.been.calledWith(context, newValue, oldValue);
         }
         next();
       },         checkDelay * 2);
@@ -147,7 +148,7 @@ export function executeSharedPropertyObserverTests(obj: any, observer: any, done
       callable0.call.resetHistory();
       observer.setValue('bar');
       setTimeout(() => {
-        expect(callable0.call.lastCall).to.be.null;
+        expect(callable0.call).not.to.have.been.called;
         expect(observer._callable0).to.be.null;
         expect(observer._callable1).to.be.null;
         expect(observer._callable2).to.be.null;

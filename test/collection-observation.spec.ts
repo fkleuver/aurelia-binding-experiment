@@ -1,3 +1,4 @@
+// tslint:disable:no-unused-expression
 import { createObserverLocator, checkDelay } from './shared';
 import { ModifyCollectionObserver } from '../src/collection-observation';
 import { spy } from 'sinon';
@@ -18,7 +19,7 @@ describe('collection length', () => {
     obj.push('foo');
     expect(observer.getValue()).to.equal(1);
     setTimeout(() => {
-      expect(callback.lastCall.args).to.deep.equal([1, 0]);
+      expect(callback).to.have.been.calledWith(1, 0);
       observer.unsubscribe(callback);
       done();
     },         checkDelay * 2);
@@ -33,7 +34,7 @@ describe('collection length', () => {
     obj.set('foo', 'bar');
     expect(observer.getValue()).to.equal(1);
     setTimeout(() => {
-      expect(callback.lastCall.args).to.deep.equal([1, 0]);
+      expect(callback).to.have.been.calledWith(1, 0);
       observer.unsubscribe(callback);
       done();
     },         checkDelay * 2);
