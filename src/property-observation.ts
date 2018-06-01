@@ -1,4 +1,5 @@
 import { subscriberCollection } from './subscriber-collection';
+import { TaskQueue } from 'aurelia-task-queue';
 
 export const propertyAccessor = {
   getValue: (obj: any, propertyName: string): any => obj[propertyName],
@@ -33,7 +34,7 @@ export class PrimitiveObserver {
 
 @subscriberCollection()
 export class SetterObserver {
-  public taskQueue: any;
+  public taskQueue: TaskQueue;
   public obj: any;
   public propertyName: string;
   public queued: boolean;
@@ -44,7 +45,7 @@ export class SetterObserver {
   public addSubscriber: (context: any, callable: any) => void;
   public removeSubscriber: (context: any, callable: any) => void;
 
-  constructor(taskQueue: any, obj: any, propertyName: string) {
+  constructor(taskQueue: TaskQueue, obj: any, propertyName: string) {
     this.taskQueue = taskQueue;
     this.obj = obj;
     this.propertyName = propertyName;

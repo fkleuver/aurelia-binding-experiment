@@ -3,6 +3,9 @@ import { TaskQueue } from 'aurelia-task-queue';
 import { EventManager } from './event-manager';
 import { Parser } from './parser';
 import { SetterObserver, PrimitiveObserver, propertyAccessor } from './property-observation';
+import { getArrayObserver } from './array-observation';
+import { getMapObserver } from './map-observation';
+import { getSetObserver } from './set-observation';
 
 export class ObserverLocator {
   public static inject: Function[] = [TaskQueue, EventManager, Parser];
@@ -136,25 +139,25 @@ export class ObserverLocator {
       }
     }
 
-    // if (obj instanceof Array) {
-    //   if (propertyName === 'length') {
-    //     return this.getArrayObserver(obj).getLengthObserver();
-    //   }
+    if (obj instanceof Array) {
+      if (propertyName === 'length') {
+        return this.getArrayObserver(obj).getLengthObserver();
+      }
 
-    //   return new DirtyCheckProperty(this.dirtyChecker, obj, propertyName);
-    // } else if (obj instanceof Map) {
-    //   if (propertyName === 'size') {
-    //     return this.getMapObserver(obj).getLengthObserver();
-    //   }
+      //return new DirtyCheckProperty(this.dirtyChecker, obj, propertyName);
+    } else if (obj instanceof Map) {
+      if (propertyName === 'size') {
+        return this.getMapObserver(obj).getLengthObserver();
+      }
 
-    //   return new DirtyCheckProperty(this.dirtyChecker, obj, propertyName);
-    // } else if (obj instanceof Set) {
-    //   if (propertyName === 'size') {
-    //     return this.getSetObserver(obj).getLengthObserver();
-    //   }
+      //return new DirtyCheckProperty(this.dirtyChecker, obj, propertyName);
+    } else if (obj instanceof Set) {
+      if (propertyName === 'size') {
+        return this.getSetObserver(obj).getLengthObserver();
+      }
 
-    //   return new DirtyCheckProperty(this.dirtyChecker, obj, propertyName);
-    // }
+      //return new DirtyCheckProperty(this.dirtyChecker, obj, propertyName);
+    }
 
     return new SetterObserver(this.taskQueue, obj, propertyName);
   }
@@ -185,15 +188,15 @@ export class ObserverLocator {
     return propertyAccessor;
   }
 
-  // public getArrayObserver(array) {
-  //   return getArrayObserver(this.taskQueue, array);
-  // }
+  public getArrayObserver(array: Array<any>): any {
+    return getArrayObserver(this.taskQueue, array);
+  }
 
-  // public getMapObserver(map) {
-  //   return getMapObserver(this.taskQueue, map);
-  // }
+  public getMapObserver(map: Map<any, any>): any {
+    return getMapObserver(this.taskQueue, map);
+  }
 
-  // public getSetObserver(set) {
-  //   return getSetObserver(this.taskQueue, set);
-  // }
+  public getSetObserver(set: Set<any>): any {
+    return getSetObserver(this.taskQueue, set);
+  }
 }

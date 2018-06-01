@@ -40,7 +40,7 @@
     "mocha-no-side-effect-code": false,
     "no-any": false,
     "no-arg": true,
-    "no-backbone-get-set-outside-model": true,
+    "no-backbone-get-set-outside-model": false,
     "no-bitwise": false,
     "no-conditional-assignment": false,
     "no-console": [true, "debug", "info", "log", "time", "timeEnd", "trace"],
@@ -97,7 +97,7 @@
     "switch-final-break": true,
     "triple-equals": false,
     "use-isnan": true,
-    "use-named-parameter": true,
+    "use-named-parameter": false,
 
     /**
      * Code Clarity. The following rules should be turned on because they make the code
