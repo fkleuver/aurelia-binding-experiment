@@ -792,6 +792,11 @@ function connectBindingToSignal(binding, name) {
     }
     binding.observeProperty(signals, name);
 }
+function signalBindings(name) {
+    if (signals.hasOwnProperty(name)) {
+        signals[name]++;
+    }
+}
 
 (function (bindingMode) {
     bindingMode[bindingMode["oneTime"] = 1] = "oneTime";
@@ -2939,6 +2944,9 @@ class BindingEngine {
 }
 BindingEngine.inject = [ObserverLocator, Parser];
 
+exports.calcSplices = calcSplices;
+exports.mergeSplice = mergeSplice;
+exports.projectArraySplices = projectArraySplices;
 exports.getArrayObserver = getArrayObserver;
 exports.BindingBehaviorExpression = BindingBehaviorExpression;
 exports.ValueConverterExpression = ValueConverterExpression;
@@ -2960,7 +2968,14 @@ exports.ArrayLiteralExpression = ArrayLiteralExpression;
 exports.ObjectLiteralExpression = ObjectLiteralExpression;
 exports.BindingEngine = BindingEngine;
 exports.BindingExpression = BindingExpression;
+exports.targetContext = targetContext;
+exports.sourceContext = sourceContext;
+exports.enqueueBindingConnect = enqueueBindingConnect;
 exports.connectable = connectable;
+exports.delegationStrategy = delegationStrategy;
+exports.EventManager = EventManager;
+exports.EventSubscriber = EventSubscriber;
+exports.getChangeRecords = getChangeRecords;
 exports.getMapObserver = getMapObserver;
 exports.ObserverLocator = ObserverLocator;
 exports.Parser = Parser;
@@ -2970,4 +2985,6 @@ exports.createOverrideContext = createOverrideContext;
 exports.getContextFor = getContextFor;
 exports.createScopeForTest = createScopeForTest;
 exports.getSetObserver = getSetObserver;
+exports.connectBindingToSignal = connectBindingToSignal;
+exports.signalBindings = signalBindings;
 exports.subscriberCollection = subscriberCollection;
