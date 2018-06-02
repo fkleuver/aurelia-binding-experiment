@@ -131,8 +131,11 @@ export class Binding {
 
     const mode = this.mode;
     if (!this.targetObserver) {
-      const method = mode === bindingMode.twoWay || mode === bindingMode.fromView ? 'getObserver' : 'getAccessor';
-      this.targetObserver = (<any>this.observerLocator)[method](this.target, this.targetProperty);
+      if (mode & bindingMode.fromView) {
+        this.targetObserver = this.observerLocator.getObserver(this.target, this.targetProperty);
+      } else {
+        this.targetObserver = this.observerLocator.getAccessor(this.target, this.targetProperty);
+      }
     }
 
     if ('bind' in this.targetObserver) {

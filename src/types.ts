@@ -29,10 +29,10 @@ export interface Binding {
 }
 
 export enum bindingMode {
-  oneTime = 0,
-  toView = 1,
-  twoWay = 2,
-  fromView = 3
+  oneTime = 1,
+  toView = 2,
+  fromView = 4,
+  twoWay = 6,
 }
 
 export type Unpacked<T> = T extends (infer U)[] ? U : T;
