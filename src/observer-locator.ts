@@ -77,7 +77,7 @@ export class ObserverLocator {
         return observer;
       }
     }
-    return null;
+    return <any>null;
   }
 
   public createPropertyObserver(obj: any, propertyName: string): Observer {

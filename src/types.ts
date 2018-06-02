@@ -21,7 +21,7 @@ export interface Observer {
 
   addSubscriber(context: any, callable: Callable): boolean;
   removeSubscriber(context: any, callable: Callable): boolean;
-  callSubscribers(newValue: any, oldValue: Callable): void;
+  callSubscribers(newValue: any, oldValue: Callable, flags: BindingFlags): void;
   hasSubscribers(): boolean;
   hasSubscriber(context: any, callable: Callable): boolean;
 
@@ -37,7 +37,7 @@ export interface Connectable {
 }
 
 export interface Callable {
-  call(context: any, newValue: any, oldValue: any): void;
+  call(context: any, newValue: any, oldValue: any, flags: BindingFlags): void;
 }
 
 export interface SubscriberCollection extends Observer {

@@ -1,6 +1,6 @@
 import { subscriberCollection } from './subscriber-collection';
 import { TaskQueue } from 'aurelia-task-queue';
-import { Callable, Observer } from './types';
+import { Callable, Observer, BindingFlags } from './types';
 
 export const propertyAccessor = {
   getValue: (obj: any, propertyName: string): any => obj[propertyName],
@@ -45,7 +45,7 @@ export class SetterObserver implements Observer {
 
   public addSubscriber: (context: any, callable: Callable) => boolean;
   public removeSubscriber: (context: any, callable: Callable) => boolean;
-  public callSubscribers: (newValue: any, oldValue: any) => void;
+  public callSubscribers: (newValue: any, oldValue: any, flags: BindingFlags) => void;
   public hasSubscribers: () => boolean;
   public hasSubscriber: (context: any, callable: Callable) => boolean;
 
@@ -76,20 +76,20 @@ export class SetterObserver implements Observer {
       if (!this.queued) {
         this.oldValue = oldValue;
         this.queued = true;
-        this.taskQueue.queueMicroTask(this);
+        this.taskQueue.queueMicroTask(<any>this);
       }
 
       this.currentValue = newValue;
     }
   }
 
-  public call(): void {
+  public call(flags: BindingFlags): void {
     const oldValue = this.oldValue;
     const newValue = this.currentValue;
 
     this.queued = false;
 
-    this.callSubscribers(newValue, oldValue);
+    this.callSubscribers(newValue, oldValue, flags);
   }
 
   public subscribe(context: any, callable: Callable): void {

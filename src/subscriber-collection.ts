@@ -1,4 +1,4 @@
-import { Callable, Observer, SubscriberCollection } from './types';
+import { Callable, Observer, SubscriberCollection, BindingFlags } from './types';
 
 function addSubscriber(this: SubscriberCollection, context: any, callable: Callable): boolean {
   if (this.hasSubscriber(context, callable)) {
@@ -32,17 +32,17 @@ function addSubscriber(this: SubscriberCollection, context: any, callable: Calla
 function removeSubscriber(this: SubscriberCollection, context: any, callable: Callable): boolean {
   if (this._context0 === context && this._callable0 === callable) {
     this._context0 = null;
-    this._callable0 = null;
+    this._callable0 = <any>null;
     return true;
   }
   if (this._context1 === context && this._callable1 === callable) {
     this._context1 = null;
-    this._callable1 = null;
+    this._callable1 = <any>null;
     return true;
   }
   if (this._context2 === context && this._callable2 === callable) {
     this._context2 = null;
-    this._callable2 = null;
+    this._callable2 = <any>null;
     return true;
   }
   const callables = this._callablesRest;
@@ -66,7 +66,7 @@ const arrayPool1 = new Array();
 const arrayPool2 = new Array();
 const poolUtilization = new Array();
 
-function callSubscribers(this: SubscriberCollection, newValue: any, oldValue: any): void {
+function callSubscribers(this: SubscriberCollection, newValue: any, oldValue: any, flags: BindingFlags): void {
   const context0 = this._context0;
   const callable0 = this._callable0;
   const context1 = this._context1;
@@ -106,23 +106,23 @@ function callSubscribers(this: SubscriberCollection, newValue: any, oldValue: an
 
   if (context0) {
     if (callable0) {
-      callable0.call(context0, newValue, oldValue);
+      callable0.call(context0, newValue, oldValue, flags);
     } else {
-      context0(newValue, oldValue);
+      context0(newValue, oldValue, flags);
     }
   }
   if (context1) {
     if (callable1) {
-      callable1.call(context1, newValue, oldValue);
+      callable1.call(context1, newValue, oldValue, flags);
     } else {
-      context1(newValue, oldValue);
+      context1(newValue, oldValue, flags);
     }
   }
   if (context2) {
     if (callable2) {
-      callable2.call(context2, newValue, oldValue);
+      callable2.call(context2, newValue, oldValue, flags);
     } else {
-      context2(newValue, oldValue);
+      context2(newValue, oldValue, flags);
     }
   }
   if (length) {
@@ -132,7 +132,7 @@ function callSubscribers(this: SubscriberCollection, newValue: any, oldValue: an
       if (callable) {
         callable.call(context, newValue, oldValue);
       } else {
-        context(newValue, oldValue);
+        context(newValue, oldValue, flags);
       }
       contextsRest[i] = null;
       callablesRest[i] = null;

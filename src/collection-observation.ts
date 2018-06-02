@@ -2,7 +2,7 @@ import { calcSplices, projectArraySplices } from './array-change-records';
 import { getChangeRecords } from './map-change-records';
 import { subscriberCollection } from './subscriber-collection';
 import { TaskQueue } from 'aurelia-task-queue';
-import { Observer, Callable } from './types';
+import { Observer, Callable, BindingFlags } from './types';
 
 @subscriberCollection()
 export class ModifyCollectionObserver implements Observer {
@@ -16,7 +16,7 @@ export class ModifyCollectionObserver implements Observer {
 
   public addSubscriber: (context: any, callable: Callable) => boolean;
   public removeSubscriber: (context: any, callable: Callable) => boolean;
-  public callSubscribers: (newValue: any, oldValue: any) => void;
+  public callSubscribers: (newValue: any, oldValue: any, flags: BindingFlags) => void;
   public hasSubscribers: () => boolean;
   public hasSubscriber: (context: any, callable: Callable) => boolean;
 
@@ -64,13 +64,13 @@ export class ModifyCollectionObserver implements Observer {
 
     if (!this.queued) {
       this.queued = true;
-      this.taskQueue.queueMicroTask(this);
+      this.taskQueue.queueMicroTask(<any>this);
     }
   }
 
-  public flushChangeRecords(): void {
+  public flushChangeRecords(flags: BindingFlags): void {
     if ((this.changeRecords && this.changeRecords.length) || this.oldCollection) {
-      this.call();
+      this.call(flags);
     }
   }
 
@@ -79,7 +79,7 @@ export class ModifyCollectionObserver implements Observer {
 
     if (this.hasSubscribers() && !this.queued) {
       this.queued = true;
-      this.taskQueue.queueMicroTask(this);
+      this.taskQueue.queueMicroTask(<any>this);
     }
   }
 
@@ -87,7 +87,7 @@ export class ModifyCollectionObserver implements Observer {
     return this.lengthObserver || (this.lengthObserver = new CollectionLengthObserver(this.collection));
   }
 
-  public call(): void {
+  public call(flags: BindingFlags): void {
     const changeRecords = this.changeRecords;
     const oldCollection = this.oldCollection;
     let records;
@@ -113,11 +113,11 @@ export class ModifyCollectionObserver implements Observer {
         }
       }
 
-      this.callSubscribers(records, undefined);
+      this.callSubscribers(records, undefined, flags);
     }
 
     if (this.lengthObserver) {
-      this.lengthObserver.call((<any>this.collection)[this.lengthPropertyName]);
+      this.lengthObserver.call((<any>this.collection)[this.lengthPropertyName], flags);
     }
   }
 }
@@ -130,7 +130,7 @@ export class CollectionLengthObserver implements Observer {
 
   public addSubscriber: (context: any, callable: Callable) => boolean;
   public removeSubscriber: (context: any, callable: Callable) => boolean;
-  public callSubscribers: (newValue: any, oldValue: any) => void;
+  public callSubscribers: (newValue: any, oldValue: any, flags: BindingFlags) => void;
   public hasSubscribers: () => boolean;
   public hasSubscriber: (context: any, callable: Callable) => boolean;
 
@@ -156,9 +156,9 @@ export class CollectionLengthObserver implements Observer {
     this.removeSubscriber(context, callable);
   }
 
-  public call(newValue: number): void {
+  public call(newValue: number, flags: BindingFlags): void {
     const oldValue = this.currentValue;
-    this.callSubscribers(newValue, oldValue);
+    this.callSubscribers(newValue, oldValue, flags);
     this.currentValue = newValue;
   }
 }
