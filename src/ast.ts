@@ -11,6 +11,7 @@ export type IsAssignmentExpression = IsConditionalExpression | AssignmentExpress
 export type IsValueConverterExpression = IsAssignmentExpression | ValueConverterExpression;
 export type IsBindingBehaviorExpression = IsValueConverterExpression | BindingBehaviorExpression;
 export type IsAssignableExpression = AccessScopeExpression | AccessKeyedExpression | AccessMemberExpression;
+export type Expression = IsBindingBehaviorExpression;
 
 export class BindingBehaviorExpression {
 

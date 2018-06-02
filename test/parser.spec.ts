@@ -1,4 +1,8 @@
 // tslint:disable:no-unused-expression
+// tslint:disable:no-multiline-string
+// tslint:disable:typedef
+// tslint:disable:no-invalid-template-strings
+// tslint:disable:number-literal-format
 import { Parser } from '../src/parser';
 import { AccessKeyedExpression, AccessMemberExpression, AccessScopeExpression, AccessThisExpression,
   AssignmentExpression, BinaryExpression, BindingBehaviorExpression, CallFunctionExpression,
@@ -574,9 +578,7 @@ describe('Parser', () => {
       for (const char of latin1IdentifierStartChars) {
         it(char, () => {
           const expr = parser.parse(char);
-          verifyEqual(expr,
-            new AccessScopeExpression(char, 0)
-         );
+          verifyEqual(expr, new AccessScopeExpression(char, 0));
         });
       }
     });
@@ -584,11 +586,9 @@ describe('Parser', () => {
     describe('unicode IdentifierPart', () => {
       for (const char of latin1IdentifierPartChars) {
         it(char, () => {
-          const identifier = '$' + char;
+          const identifier = `$${char}`;
           const expr = parser.parse(identifier);
-          verifyEqual(expr,
-            new AccessScopeExpression(identifier, 0)
-         );
+          verifyEqual(expr, new AccessScopeExpression(identifier, 0));
         });
       }
     });
@@ -718,7 +718,7 @@ describe('Parser', () => {
 
     describe('invalid primary expression', () => {
       const expressions = ['.', ',', '&', '|', '=', '<', '>', '*', '%', '/'];
-      expressions.push(...expressions.map(e => e + ' '));
+      expressions.push(...expressions.map(e => `${e} `));
       for (const expr of expressions) {
         it(expr, () => {
           if (expr.length === 1) {
@@ -733,7 +733,7 @@ describe('Parser', () => {
     describe('unknown unicode IdentifierPart', () => {
       for (const char of otherBMPIdentifierPartChars) {
         it(char, () => {
-          const identifier = '$' + char;
+          const identifier = `$${char}`;
           _verifyError(identifier, `Unexpected character [${char}] at column 1`);
         });
       }
@@ -752,6 +752,7 @@ describe('Parser', () => {
     });
   });
 
+  // tslint:disable-next-line:function-name
   function _verifyError(expr: any, errorMessage: any = ''): any {
     verifyError(parser, expr, errorMessage);
   }
@@ -791,5 +792,6 @@ function verifyEqual(actual: any, expected: any): any {
 }
 
 function unicodeEscape(str: any): any {
+  // tslint:disable-next-line:prefer-template
   return str.replace(/[\s\S]/g, (c: any) => `\\u${('0000' + c.charCodeAt().toString(16)).slice(-4)}`);
 }
