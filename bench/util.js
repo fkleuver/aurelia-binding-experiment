@@ -37,7 +37,7 @@ class Benchmark {
     return this.tests[this.testIndex];
   }
 
-  constructor(columns, tests, sutCount, iterations) {
+  constructor(columns, tests, sutCount, iterations, rotations = 1) {
     this.columns = columns;
     for (const column of columns) {
       column.pad = column.alignment === 'left' ? padRight : padLeft;
@@ -45,20 +45,31 @@ class Benchmark {
     this.tests = tests;
     this.sutCount = sutCount;
     this.iterations = iterations;
-    this.totalElapsed = new Uint32Array(sutCount);
+    this.rotations = rotations;
+    this.totalElapsed = [0, 0, 0];
     this.sutIndex = 0;
     this.testIndex = 0;
     this.columnIndex = 0;
-    this.elapsed = new Uint32Array(3);
+    this.currentRotation = 0;
+    this.elapsed = [0, 0, 0];
     this.ops = 0;
     this.totalWidth = columns.map(c => c.width).reduce((prev, cur) => prev + cur);
     this.hr = padRight('', this.totalWidth, '-');
   }
 
+  nextRotation() {
+    this.sutIndex = 0;
+    this.testIndex = 0;
+    this.columnIndex = 0;
+    this.currentRotation++;
+    this.elapsed = [0, 0, 0];
+    this.writeSeparator();
+  }
+
   nextTest() {
     this.testIndex++;
     this.columnIndex = 0;
-    this.elapsed = new Uint32Array(3);
+    this.elapsed = [0, 0, 0];
     this.sutIndex = 0;
   }
 
@@ -105,7 +116,7 @@ class Benchmark {
     }
   }
 
-  writeElapsedText(divider = this.iterations) {
+  writeElapsedText(divider = this.iterations * this.test.weight) {
     this.columnIndex = this.sutIndex === 0 ? 2 : this.sutIndex === 1 ? 3 : 5;
     let elapsed = Math.round(this.elapsed[this.sutIndex] / divider);
     let symbol = 'ns';
@@ -133,7 +144,7 @@ class Benchmark {
     this.output = this.test.weight > 1 ? colors.Bright : '';
     this.output += this.col.pad(this.test.weight, this.col.width);
     this.nextCol();
-    this.output += this.col.pad(this.test.expr, this.col.width) + colors.Reset;
+    this.output += this.col.pad(this.test.expr, this.col.width).slice(0, this.col.width) + colors.Reset;
     this.nextCol();
   }
 
