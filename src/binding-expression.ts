@@ -150,7 +150,7 @@ export class Binding implements Connectable {
     if (mode === bindingMode.oneTime) {
       return;
     } else if (mode === bindingMode.toView) {
-      enqueueBindingConnect(this);
+      enqueueBindingConnect(this, flags);
     } else if (mode === bindingMode.twoWay) {
       this.sourceExpression.connect(this, source, flags);
       this.targetObserver.subscribe(targetContext, this);

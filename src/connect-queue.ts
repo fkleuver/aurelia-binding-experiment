@@ -1,5 +1,6 @@
 import { PLATFORM } from 'aurelia-pal';
 import { Binding } from './binding-expression';
+import { BindingFlags } from './types';
 
 const queue = new Array<any>(); // the connect queue
 const queued: { [key: number]: boolean } = {}; // tracks whether a binding with a particular id is in the queue
@@ -34,10 +35,10 @@ function flush(animationFrameStart: number): void {
   }
 }
 
-export function enqueueBindingConnect(binding: Binding): void {
+export function enqueueBindingConnect(binding: Binding, flags: BindingFlags): void {
   if (immediate < minimumImmediate) {
     immediate++;
-    binding.connect(false);
+    binding.connect(false, flags);
   } else {
     // get or assign the binding's id that enables tracking whether it's been queued.
     let id = binding.__connectQueueId;
