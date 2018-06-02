@@ -3,7 +3,7 @@ import { Parser } from './parser';
 import { BindingExpression } from './binding-expression';
 import { createOverrideContext } from './scope';
 import { Expression } from './ast';
-import { bindingMode, LookupFunctions } from './types';
+import { bindingMode, LookupFunctions, Observer, Subscribeable, Callable, Subscription } from './types';
 
 const emptyLookupFunctions = {
   bindingBehaviors: (name: string): any => null,
@@ -36,22 +36,22 @@ export class BindingEngine {
     );
   }
 
-  public propertyObserver(obj: any, propertyName: string): any {
+  public propertyObserver(obj: any, propertyName: string): Subscribeable {
     return {
-      subscribe: (callback: Function): any => {
+      subscribe: (callback: Callable): Subscription => {
         const observer = this.observerLocator.getObserver(obj, propertyName);
-        observer.subscribe(callback);
+        observer.subscribe(observer, callback);
         return {
-          dispose: () => observer.unsubscribe(callback)
+          dispose: () => observer.unsubscribe(observer, callback)
         };
       }
     };
   }
 
-  public collectionObserver(collection: Array<any> | Set<any> | Map<any, any>): any {
+  public collectionObserver(collection: Array<any> | Set<any> | Map<any, any>): Subscribeable {
     return {
-      subscribe: (callback: Function): any => {
-        let observer: any;
+      subscribe: (callback: Callable): Subscription => {
+        let observer: Observer;
         if (collection instanceof Array) {
           observer = this.observerLocator.getArrayObserver(collection);
         } else if (collection instanceof Map) {
@@ -61,9 +61,9 @@ export class BindingEngine {
         } else {
           throw new Error('collection must be an instance of Array, Map or Set.');
         }
-        observer.subscribe(callback);
+        observer.subscribe(observer, callback);
         return {
-          dispose: () => observer.unsubscribe(callback)
+          dispose: () => observer.unsubscribe(observer, callback)
         };
       }
     };

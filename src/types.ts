@@ -1,4 +1,5 @@
 import { IsBindingBehaviorExpression } from './ast';
+import { Binding } from './binding-expression';
 
 export interface OverrideContext {
   parentOverrideContext: OverrideContext | null;
@@ -15,17 +16,47 @@ export interface LookupFunctions {
   bindingBehaviors(name: string): { bind(binding: Binding, scope: Scope, ...args: any[]): void; unbind?(binding: Binding, scope: Scope): void } | null;
 }
 
-export interface Binding {
-  mode?: bindingMode;
-  sourceExpression?: IsBindingBehaviorExpression;
-  isBound: boolean;
-  source: Scope;
-  updateTarget?(value: any): void;
-  updateSource?(value: any): void;
-  callSource?(event: any): any;
-  bind(source: Scope): void;
-  unbind(): void;
-  [key: string]: any;
+export interface Observer {
+  doNotCache?: boolean;
+
+  addSubscriber(context: any, callable: Callable): boolean;
+  removeSubscriber(context: any, callable: Callable): boolean;
+  callSubscribers(newValue: any, oldValue: Callable): void;
+  hasSubscribers(): boolean;
+  hasSubscriber(context: any, callable: Callable): boolean;
+
+  subscribe(context: any, callback: Callable): void;
+  unsubscribe(context: any, callback: Callable): void;
+}
+
+export interface Connectable {
+  observeProperty(obj: any, propertyName: string): void;
+  observeArray(array: Array<any>): void;
+  unobserve(all: boolean): void;
+  addObserver(observer: Observer): void;
+}
+
+export interface Callable {
+  call(context: any, newValue: any, oldValue: any): void;
+}
+
+export interface SubscriberCollection extends Observer {
+  _context0: any;
+  _callable0: Callable;
+  _context1: any;
+  _callable1: Callable;
+  _context2: any;
+  _callable2: Callable;
+  _contextsRest: Array<any>;
+  _callablesRest: Array<Callable>;
+}
+
+export interface Subscription {
+  dispose(): void;
+}
+
+export interface Subscribeable {
+  subscribe(callback: Callable): Subscription;
 }
 
 export enum bindingMode {

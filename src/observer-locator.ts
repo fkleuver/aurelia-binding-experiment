@@ -6,6 +6,8 @@ import { SetterObserver, PrimitiveObserver, propertyAccessor } from './property-
 import { getArrayObserver } from './array-observation';
 import { getMapObserver } from './map-observation';
 import { getSetObserver } from './set-observation';
+import { Observer } from './types';
+import { ModifyCollectionObserver } from './collection-observation';
 
 export class ObserverLocator {
   public static inject: Function[] = [TaskQueue, EventManager, Parser];
@@ -14,16 +16,16 @@ export class ObserverLocator {
   public parser: Parser;
   public adapters: any[];
 
-  constructor(taskQueue: any, eventManager: any, parser: any) {
+  constructor(taskQueue: TaskQueue, eventManager: EventManager, parser: Parser) {
     this.taskQueue = taskQueue;
     this.eventManager = eventManager;
     this.parser = parser;
     this.adapters = [];
   }
 
-  public getObserver(obj: any, propertyName: string): any {
+  public getObserver(obj: any, propertyName: string): Observer {
     let observersLookup = obj.__observers__;
-    let observer;
+    let observer: Observer;
 
     if (observersLookup && propertyName in observersLookup) {
       return observersLookup[propertyName];
@@ -67,7 +69,7 @@ export class ObserverLocator {
     this.adapters.push(adapter);
   }
 
-  public getAdapterObserver(obj: any, propertyName: string, descriptor: any): any {
+  public getAdapterObserver(obj: any, propertyName: string, descriptor: any): Observer {
     for (let i = 0, ii = this.adapters.length; i < ii; i++) {
       const adapter = this.adapters[i];
       const observer = adapter.getObserver(obj, propertyName, descriptor);
@@ -78,13 +80,13 @@ export class ObserverLocator {
     return null;
   }
 
-  public createPropertyObserver(obj: any, propertyName: string): any {
+  public createPropertyObserver(obj: any, propertyName: string): Observer {
     let descriptor;
     let handler;
     let xlinkResult;
 
     if (!(obj instanceof Object)) {
-      return new PrimitiveObserver(obj, propertyName);
+      return new PrimitiveObserver(obj, propertyName) as any;
     }
 
     // if (obj instanceof DOM.Element) {
@@ -188,15 +190,15 @@ export class ObserverLocator {
     return propertyAccessor;
   }
 
-  public getArrayObserver(array: Array<any>): any {
+  public getArrayObserver(array: Array<any>): ModifyCollectionObserver {
     return getArrayObserver(this.taskQueue, array);
   }
 
-  public getMapObserver(map: Map<any, any>): any {
+  public getMapObserver(map: Map<any, any>): ModifyCollectionObserver {
     return getMapObserver(this.taskQueue, map);
   }
 
-  public getSetObserver(set: Set<any>): any {
+  public getSetObserver(set: Set<any>): ModifyCollectionObserver {
     return getSetObserver(this.taskQueue, set);
   }
 }

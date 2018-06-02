@@ -414,7 +414,7 @@ function createInitialSplices(array: Array<any>, changeRecords: Array<ArrayChang
 export function projectArraySplices(array: Array<any>, changeRecords: Array<ArrayChangeRecord>): Array<Splice> {
   let splices = new Array<any>();
 
-  createInitialSplices(array, changeRecords).forEach(function(splice) {
+  createInitialSplices(array, changeRecords).forEach(function(splice: Splice): void {
     if (splice.addedCount === 1 && splice.removed.length === 1) {
       if (splice.removed[0] !== array[splice.index]) {
         splices.push(splice);

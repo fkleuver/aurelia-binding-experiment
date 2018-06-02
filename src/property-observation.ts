@@ -1,5 +1,6 @@
 import { subscriberCollection } from './subscriber-collection';
 import { TaskQueue } from 'aurelia-task-queue';
+import { Callable, Observer } from './types';
 
 export const propertyAccessor = {
   getValue: (obj: any, propertyName: string): any => obj[propertyName],
@@ -33,7 +34,7 @@ export class PrimitiveObserver {
 }
 
 @subscriberCollection()
-export class SetterObserver {
+export class SetterObserver implements Observer {
   public taskQueue: TaskQueue;
   public obj: any;
   public propertyName: string;
@@ -41,9 +42,12 @@ export class SetterObserver {
   public observing: boolean;
   public currentValue: any;
   public oldValue: any;
+
+  public addSubscriber: (context: any, callable: Callable) => boolean;
+  public removeSubscriber: (context: any, callable: Callable) => boolean;
   public callSubscribers: (newValue: any, oldValue: any) => void;
-  public addSubscriber: (context: any, callable: any) => void;
-  public removeSubscriber: (context: any, callable: any) => void;
+  public hasSubscribers: () => boolean;
+  public hasSubscriber: (context: any, callable: Callable) => boolean;
 
   constructor(taskQueue: TaskQueue, obj: any, propertyName: string) {
     this.taskQueue = taskQueue;
@@ -88,14 +92,14 @@ export class SetterObserver {
     this.callSubscribers(newValue, oldValue);
   }
 
-  public subscribe(context: any, callable: any): void {
+  public subscribe(context: any, callable: Callable): void {
     if (!this.observing) {
       this.convertProperty();
     }
     this.addSubscriber(context, callable);
   }
 
-  public unsubscribe(context: any, callable: any): void {
+  public unsubscribe(context: any, callable: Callable): void {
     this.removeSubscriber(context, callable);
   }
 

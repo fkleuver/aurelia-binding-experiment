@@ -1,4 +1,5 @@
 import { sourceContext } from './call-context';
+import { Observer } from './types';
 
 const slotNames = new Array<string>();
 const versionSlotNames = new Array<string>();
@@ -8,7 +9,7 @@ for (let i = 0; i < 100; i++) {
   versionSlotNames.push(`_observerVersion${i}`);
 }
 
-function addObserver(this: any, observer: any): void {
+function addObserver(this: any, observer: Observer): void {
   // find the observer.
   const observerSlots = this._observerSlots === undefined ? 0 : this._observerSlots;
   let i = observerSlots;

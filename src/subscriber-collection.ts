@@ -1,4 +1,6 @@
-function addSubscriber(this: any, context: any, callable: any): boolean {
+import { Callable, Observer, SubscriberCollection } from './types';
+
+function addSubscriber(this: SubscriberCollection, context: any, callable: Callable): boolean {
   if (this.hasSubscriber(context, callable)) {
     return false;
   }
@@ -27,7 +29,7 @@ function addSubscriber(this: any, context: any, callable: any): boolean {
   return true;
 }
 
-function removeSubscriber(this: any, context: any, callable: any): boolean {
+function removeSubscriber(this: SubscriberCollection, context: any, callable: Callable): boolean {
   if (this._context0 === context && this._callable0 === callable) {
     this._context0 = null;
     this._callable0 = null;
@@ -64,7 +66,7 @@ const arrayPool1 = new Array();
 const arrayPool2 = new Array();
 const poolUtilization = new Array();
 
-function callSubscribers(this: any, newValue: any, oldValue: any): void {
+function callSubscribers(this: SubscriberCollection, newValue: any, oldValue: any): void {
   const context0 = this._context0;
   const callable0 = this._callable0;
   const context1 = this._context1;
@@ -139,24 +141,22 @@ function callSubscribers(this: any, newValue: any, oldValue: any): void {
   }
 }
 
-function hasSubscribers(this: any): boolean {
-  return !!(
-    this._context0
-    || this._context1
-    || this._context2
-    || this._contextsRest && this._contextsRest.length);
+function hasSubscribers(this: SubscriberCollection): boolean {
+  return !!(this._context0 || this._context1 || this._context2 || (this._contextsRest && this._contextsRest.length));
 }
 
-function hasSubscriber(this: any, context: any, callable: any): boolean {
-  const has = this._context0 === context && this._callable0 === callable
-    || this._context1 === context && this._callable1 === callable
-    || this._context2 === context && this._callable2 === callable;
+function hasSubscriber(this: SubscriberCollection, context: any, callable: Callable): boolean {
+  const has =
+    (this._context0 === context && this._callable0 === callable) ||
+    (this._context1 === context && this._callable1 === callable) ||
+    (this._context2 === context && this._callable2 === callable);
   if (has) {
     return true;
   }
   let index;
   const contexts = this._contextsRest;
-  if (!contexts || (index = contexts.length) === 0) { // eslint-disable-line no-cond-assign
+  if (!contexts || (index = contexts.length) === 0) {
+    // eslint-disable-line no-cond-assign
     return false;
   }
   const callables = this._callablesRest;

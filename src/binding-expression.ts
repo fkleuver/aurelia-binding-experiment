@@ -3,7 +3,7 @@ import { enqueueBindingConnect } from './connect-queue';
 import { sourceContext, targetContext } from './call-context';
 import { ObserverLocator } from './observer-locator';
 import { Expression } from './ast';
-import { bindingMode, LookupFunctions, BindingFlags } from './types';
+import { bindingMode, LookupFunctions, BindingFlags, Observer, Connectable } from './types';
 
 export class BindingExpression {
   public observerLocator: ObserverLocator;
@@ -44,7 +44,7 @@ export class BindingExpression {
 }
 
 @connectable()
-export class Binding {
+export class Binding implements Connectable {
   /*@internal*/
   public __connectQueueId: number;
   public observerLocator: ObserverLocator;
@@ -54,14 +54,14 @@ export class Binding {
   public mode: bindingMode;
   public lookupFunctions: LookupFunctions;
 
-  public targetObserver: any;
+  public targetObserver: Observer & { [key: string]: any };
   public source: any;
   public isBound: boolean;
 
   public observeProperty: (obj: any, propertyName: string) => void;
   public observeArray: (array: Array<any>) => void;
   public unobserve: (all: boolean) => void;
-  public addObserver: (observer: any) => void;
+  public addObserver: (observer: Observer) => void;
 
   private _version: number;
 

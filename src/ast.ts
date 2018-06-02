@@ -1,6 +1,7 @@
 import { getContextFor } from './scope';
 import { connectBindingToSignal } from './signals';
-import { Scope, OverrideContext, LookupFunctions, BindingFlags, Binding } from './types';
+import { Scope, OverrideContext, LookupFunctions, BindingFlags } from './types';
+import { Binding } from './binding-expression';
 
 export type IsPrimaryExpression = AccessThisExpression | AccessScopeExpression | ArrayLiteralExpression | ObjectLiteralExpression | PrimitiveLiteralExpression | TemplateExpression;
 export type IsUnaryExpression = IsPrimaryExpression | UnaryExpression;
@@ -121,7 +122,7 @@ export class ValueConverterExpression {
     if (!converter) {
       throw new Error(`No ValueConverter named "${this.name}" was found!`);
     }
-    const signals = converter.signals;
+    const signals = (<any>converter).signals;
     if (signals === undefined) {
       return;
     }

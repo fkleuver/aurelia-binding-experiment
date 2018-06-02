@@ -2,20 +2,23 @@ import { calcSplices, projectArraySplices } from './array-change-records';
 import { getChangeRecords } from './map-change-records';
 import { subscriberCollection } from './subscriber-collection';
 import { TaskQueue } from 'aurelia-task-queue';
+import { Observer, Callable } from './types';
 
 @subscriberCollection()
-export class ModifyCollectionObserver {
+export class ModifyCollectionObserver implements Observer {
   public taskQueue: TaskQueue;
   public queued: boolean;
   public changeRecords: any[];
   public oldCollection: Map<any, any> | Set<any> | Array<any>;
   public collection: Map<any, any> | Set<any> | Array<any>;
   public lengthPropertyName: string;
-  public lengthObserver: any;
+  public lengthObserver: CollectionLengthObserver;
+
+  public addSubscriber: (context: any, callable: Callable) => boolean;
+  public removeSubscriber: (context: any, callable: Callable) => boolean;
   public callSubscribers: (newValue: any, oldValue: any) => void;
-  public addSubscriber: (context: any, callable: any) => void;
-  public removeSubscriber: (context: any, callable: any) => void;
   public hasSubscribers: () => boolean;
+  public hasSubscriber: (context: any, callable: Callable) => boolean;
 
   constructor(taskQueue: TaskQueue, collection: Map<any, any> | Set<any> | Array<any>) {
     this.taskQueue = taskQueue;
@@ -26,11 +29,11 @@ export class ModifyCollectionObserver {
     this.lengthPropertyName = collection instanceof Map || collection instanceof Set ? 'size' : 'length';
   }
 
-  public subscribe(context: any, callable: any): void {
+  public subscribe(context: any, callable: Callable): void {
     this.addSubscriber(context, callable);
   }
 
-  public unsubscribe(context: any, callable: any): void {
+  public unsubscribe(context: any, callable: Callable): void {
     this.removeSubscriber(context, callable);
   }
 
@@ -120,13 +123,16 @@ export class ModifyCollectionObserver {
 }
 
 @subscriberCollection()
-export class CollectionLengthObserver {
+export class CollectionLengthObserver implements Observer {
   public collection: Map<any, any> | Set<any> | Array<any>;
   public lengthPropertyName: string;
   public currentValue: number;
+
+  public addSubscriber: (context: any, callable: Callable) => boolean;
+  public removeSubscriber: (context: any, callable: Callable) => boolean;
   public callSubscribers: (newValue: any, oldValue: any) => void;
-  public addSubscriber: (context: any, callable: any) => void;
-  public removeSubscriber: (context: any, callable: any) => void;
+  public hasSubscribers: () => boolean;
+  public hasSubscriber: (context: any, callable: Callable) => boolean;
 
   constructor(collection: Map<any, any> | Set<any> | Array<any>) {
     this.collection = collection;
@@ -142,11 +148,11 @@ export class CollectionLengthObserver {
     (<any>this.collection)[this.lengthPropertyName] = newValue;
   }
 
-  public subscribe(context: any, callable: any): void {
+  public subscribe(context: any, callable: Callable): void {
     this.addSubscriber(context, callable);
   }
 
-  public unsubscribe(context: any, callable: any): void {
+  public unsubscribe(context: any, callable: Callable): void {
     this.removeSubscriber(context, callable);
   }
 
