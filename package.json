@@ -20,6 +20,10 @@
     "url": "https://github.com/fkleuver/aurelia-binding-experiment"
   },
   "scripts": {
+    "build:commonjs:compile": "./node_modules/.bin/tsc --outDir ./dist/commonjs/temp",
+    "build:commonjs:bundle": "./node_modules/.bin/rollup --c --environment format:cjs,dir:commonjs",
+    "build:commonjs:clean": "./node_modules/.bin/rimraf ./dist/commonjs/temp",
+    "build:commonjs": "npm run build:commonjs:compile && npm run build:commonjs:bundle && npm run build:commonjs:clean",
     "test:debug": "./node_modules/.bin/cross-env TS_NODE_PROJECT=\"tsconfig-tsnode.json\" ./node_modules/.bin/karma start --browsers=ChromeDebugging --single-run=false --auto-watch=true --no-info=false",
     "test": "./node_modules/.bin/cross-env TS_NODE_PROJECT=\"tsconfig-tsnode.json\" ./node_modules/.bin/karma start --browsers=ChromeHeadless --single-run=true --auto-watch=false --no-info=true --log-level=error",
     "test:watch": "./node_modules/.bin/cross-env TS_NODE_PROJECT=\"tsconfig-tsnode.json\" ./node_modules/.bin/karma start --browsers=ChromeHeadless --single-run=false --auto-watch=true --no-info=true --log-level=error"
@@ -37,7 +41,6 @@
     "aurelia-dependency-injection": "^1.3.2",
     "aurelia-pal-browser": "^1.8.0",
     "aurelia-polyfills": "^1.3.0",
-    "aurelia-task-queue": "^1.3.0",
     "bluebird": "^3.5.1",
     "chai": "^4.1.2",
     "cross-env": "^5.1.6",
@@ -50,6 +53,10 @@
     "karma-sourcemap-loader": "^0.3.7",
     "karma-webpack": "^3.0.0",
     "mocha": "^5.2.0",
+    "rimraf": "^2.6.2",
+    "rollup": "^0.59.4",
+    "rollup-plugin-commonjs": "^9.1.3",
+    "rollup-plugin-node-resolve": "^3.3.0",
     "sinon": "^5.0.10",
     "sinon-chai": "^3.1.0",
     "ts-loader": "^4.3.0",
@@ -59,5 +66,11 @@
     "tslint-microsoft-contrib": "^5.0.3",
     "typescript": "^2.8.3",
     "webpack": "^4.10.2"
+  },
+  "dependencies": {
+    "aurelia-logging": "^1.4.0",
+    "aurelia-metadata": "^1.0.3",
+    "aurelia-pal": "^1.8.0",
+    "aurelia-task-queue": "^1.3.0"
   }
 }

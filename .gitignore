@@ -1,5 +1,6 @@
 /node_modules
 /test/build
+/dist/*/temp
 npm-debug.log
 package-lock.json
 yarn.lock
